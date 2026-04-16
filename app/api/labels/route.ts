@@ -15,7 +15,7 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   const s = getSession();
-  if (!s || s.role !== 'admin') return NextResponse.json({ error: '관리자만 가능' }, { status: 403 });
+  if (!s || s.role !== 'admin') return NextResponse.json({ error: '권한이 없습니다' }, { status: 403 });
   const { factory_id, col_key, label } = await req.json();
   if (!factory_id || !col_key || !label) return NextResponse.json({ error: '입력값 확인' }, { status: 400 });
   const { error } = await supabaseAdmin.from('column_labels').upsert({ factory_id, col_key, label });

@@ -95,6 +95,12 @@ create table if not exists factory2_logs (
 create table if not exists weather_logs (
   log_date date primary key,
   weather_text text,
+  factory1_workers smallint,
+  factory2_workers smallint,
   updated_by text,
   updated_at timestamptz default now()
 );
+
+-- 기존 DB 마이그레이션
+alter table weather_logs add column if not exists factory1_workers smallint;
+alter table weather_logs add column if not exists factory2_workers smallint;

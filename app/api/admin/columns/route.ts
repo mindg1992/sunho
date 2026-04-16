@@ -11,7 +11,7 @@ function guard() {
 }
 
 export async function POST(req: Request) {
-  if (!guard()) return NextResponse.json({ error: '관리자만 가능' }, { status: 403 });
+  if (!guard()) return NextResponse.json({ error: '권한이 없습니다' }, { status: 403 });
   const { factory_id, label, tint } = await req.json();
   if (!['1', '2'].includes(factory_id)) return NextResponse.json({ error: 'bad factory' }, { status: 400 });
   if (!label || !String(label).trim()) return NextResponse.json({ error: '컬럼명 필요' }, { status: 400 });
@@ -27,7 +27,7 @@ export async function POST(req: Request) {
 }
 
 export async function PATCH(req: Request) {
-  if (!guard()) return NextResponse.json({ error: '관리자만 가능' }, { status: 403 });
+  if (!guard()) return NextResponse.json({ error: '권한이 없습니다' }, { status: 403 });
   const { factory_id, col_key, label } = await req.json();
   if (!factory_id || !col_key || !label) return NextResponse.json({ error: '입력값 확인' }, { status: 400 });
   const { error } = await supabaseAdmin
@@ -40,7 +40,7 @@ export async function PATCH(req: Request) {
 }
 
 export async function DELETE(req: Request) {
-  if (!guard()) return NextResponse.json({ error: '관리자만 가능' }, { status: 403 });
+  if (!guard()) return NextResponse.json({ error: '권한이 없습니다' }, { status: 403 });
   const u = new URL(req.url);
   const factory_id = u.searchParams.get('factory_id');
   const col_key = u.searchParams.get('col_key');

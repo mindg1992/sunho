@@ -26,13 +26,13 @@ export default function LoginForm({ names }: { names: string[] }) {
   if (names.length === 0) {
     return (
       <div className="seed-box">
-        <p className="seed-msg">등록된 사용자가 없습니다.<br />최초 관리자를 생성해주세요.</p>
+        <p className="seed-msg">등록된 사용자가 없습니다.<br />최초 계정을 생성해주세요.</p>
         <button className="seed-btn" onClick={async () => {
           const r = await fetch('/api/seed', { method: 'POST' });
           const j = await r.json();
           alert(j.message || JSON.stringify(j));
           location.reload();
-        }}>관리자 시드 생성<span className="seed-sub">박유신 / PIN 1234</span></button>
+        }}>최초 계정 생성<span className="seed-sub">박유신 / PIN 1234</span></button>
       </div>
     );
   }

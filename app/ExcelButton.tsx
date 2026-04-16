@@ -1,4 +1,5 @@
 'use client';
+import { useState } from 'react';
 
 const ExcelIcon = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -8,13 +9,49 @@ const ExcelIcon = () => (
 );
 
 export default function ExcelButton() {
+  const [open, setOpen] = useState(false);
+  const currentYear = new Date().getFullYear();
+  const [year, setYear] = useState(currentYear);
+  const years = Array.from({ length: 7 }, (_, i) => currentYear - 3 + i);
+
+  const download = (factory: '1' | '2' | 'weather') => {
+    window.location.href = `/api/excel?factory=${factory}&year=${year}`;
+    setOpen(false);
+  };
+
   return (
-    <button
-      className="big-btn excel"
-      onClick={() => { window.location.href = '/api/excel'; }}
-    >
-      <span className="btn-icon"><ExcelIcon /></span>
-      <span>엑셀 다운로드</span>
-    </button>
+    <>
+      <button className="big-btn excel" onClick={() => setOpen(true)}>
+        <span className="btn-icon"><ExcelIcon /></span>
+        <span>엑셀 다운로드</span>
+      </button>
+      {open && (
+        <div className="modal-backdrop" onClick={() => setOpen(false)}>
+          <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+            <h3>엑셀 다운로드</h3>
+            <div className="excel-section-label">년도</div>
+            <div className="year-slider excel-year-slider">
+              {years.map((y) => (
+                <button
+                  key={y}
+                  type="button"
+                  className={`year-chip${year === y ? ' selected' : ''}`}
+                  onClick={() => setYear(y)}
+                >{y}</button>
+              ))}
+            </div>
+            <div className="excel-section-label">다운로드 대상</div>
+            <div className="excel-dl-row">
+              <button type="button" className="excel-dl-btn f1" onClick={() => download('1')}>1공장</button>
+              <button type="button" className="excel-dl-btn f2" onClick={() => download('2')}>2공장</button>
+              <button type="button" className="excel-dl-btn wx" onClick={() => download('weather')}>날씨</button>
+            </div>
+            <div className="modal-actions">
+              <button type="button" className="btn-cancel" onClick={() => setOpen(false)}>닫기</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }

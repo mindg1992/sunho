@@ -29,7 +29,7 @@ export default function Home() {
           <Image src="/logo.png" alt="선호피엔에스 로고" width={64} height={64} priority />
         </div>
       </div>
-      <div className="sub">설비보전일지 · {s.name} ({s.role === 'admin' ? '관리자' : '입력자'})</div>
+      <div className="sub">설비보전일지 · {s.name}</div>
       <div className="btn-row">
         <Link href="/factory/1">
           <button className="big-btn">1공장</button>

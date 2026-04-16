@@ -39,14 +39,14 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   if (s.role !== 'admin') {
     for (const k of Object.keys(staticPatch)) {
       if (existing[k] !== null && existing[k] !== undefined && staticPatch[k] !== existing[k]) {
-        return NextResponse.json({ error: '수정은 관리자만 가능합니다' }, { status: 403 });
+        return NextResponse.json({ error: '이미 입력된 값은 수정 권한이 없습니다' }, { status: 403 });
       }
     }
     const existingCustom = existing.custom_values || {};
     for (const k of Object.keys(customPatch)) {
       const prev = existingCustom[k];
       if (prev !== null && prev !== undefined && customPatch[k] !== prev) {
-        return NextResponse.json({ error: '수정은 관리자만 가능합니다' }, { status: 403 });
+        return NextResponse.json({ error: '이미 입력된 값은 수정 권한이 없습니다' }, { status: 403 });
       }
     }
   }

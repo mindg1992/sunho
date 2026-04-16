@@ -1,5 +1,5 @@
 'use client';
-import { useState, useMemo } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ColDef, formatKDate } from '@/lib/columns';
 
@@ -12,10 +12,35 @@ type Props = {
   session: { name: string; role: string };
 };
 
+function generateYearDates(year: number): string[] {
+  const dates: string[] = [];
+  const end = new Date(Date.UTC(year, 11, 31));
+  for (let d = new Date(Date.UTC(year, 0, 1)); d.getTime() <= end.getTime(); d.setUTCDate(d.getUTCDate() + 1)) {
+    const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(d.getUTCDate()).padStart(2, '0');
+    dates.push(`${d.getUTCFullYear()}-${m}-${day}`);
+  }
+  return dates;
+}
+
+function mergeYearRows(prev: Record<string, any>[], year: number, cols: ColDef[]): Record<string, any>[] {
+  const dates = generateYearDates(year);
+  const existing = new Map(prev.map((r) => [r.log_date, r]));
+  const yearRows = dates.map((d) => {
+    const found = existing.get(d);
+    if (found) return found;
+    const blank: Record<string, any> = { log_date: d };
+    cols.forEach((c) => (blank[c.key] = null));
+    return blank;
+  });
+  const otherRows = prev.filter((r) => !r.log_date.startsWith(`${year}-`));
+  return [...otherRows, ...yearRows].sort((a, b) => a.log_date.localeCompare(b.log_date));
+}
+
 export default function FactoryGrid({ factoryId, cols: initialCols, initialRows, weather, session }: Props) {
   const router = useRouter();
-  const [rows, setRows] = useState<Row[]>(initialRows);
   const [cols, setCols] = useState<ColDef[]>(initialCols);
+  const [rows, setRows] = useState<Row[]>(() => mergeYearRows(initialRows, new Date().getFullYear(), initialCols));
   const [wx] = useState(weather);
   const [saving, setSaving] = useState('');
   const [showAddCol, setShowAddCol] = useState(false);
@@ -67,25 +92,55 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
     setRows(rows.filter((r) => r.log_date !== logDate));
   };
 
-  // 행 추가: 날짜 선택
-  const addRow = (dateStr: string) => {
-    if (!dateStr) return;
-    if (rows.some((r) => r.log_date === dateStr)) return;
-    const blank: Row = { log_date: dateStr };
-    cols.forEach((c) => (blank[c.key] = null));
-    const next = [...rows, blank].sort((a, b) => a.log_date.localeCompare(b.log_date));
-    setRows(next);
-    // 서버에 빈 행 생성
-    fetch(`/api/factory/${factoryId}/upsert`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ log_date: dateStr, values: {} }),
-    });
+  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
+  const gridWrapRef = useRef<HTMLDivElement>(null);
+  const scrolledRef = useRef(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+
+  const onUploadFile = async (file: File) => {
+    if (!confirm(`"${file.name}" 파일을 업로드하면 데이터가 채워집니다. 계속할까요?`)) return;
+    setUploading(true);
+    const fd = new FormData();
+    fd.append('file', file);
+    const res = await fetch('/api/upload-excel', { method: 'POST', body: fd });
+    setUploading(false);
+    if (!res.ok) { alert((await res.json()).error || '업로드 실패'); return; }
+    const j = await res.json();
+    const summary = (j.result || []).map((r: any) => `${r.sheet} ${r.processed}행`).join(', ');
+    alert(`업로드 완료: ${summary}`);
+    router.refresh();
   };
+
+  const fillYear = (year: number) => {
+    setSelectedYear(year);
+    setRows((prev) => mergeYearRows(prev, year, cols));
+  };
+
+  useEffect(() => {
+    if (scrolledRef.current) return;
+    if (rows.length === 0) return;
+    const wrap = gridWrapRef.current;
+    if (!wrap) return;
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    const todayStr = `${yyyy}-${mm}-${dd}`;
+    const row = wrap.querySelector<HTMLElement>(`tr[data-date="${todayStr}"]`);
+    if (!row) return;
+    const thead = wrap.querySelector<HTMLElement>('thead');
+    const headH = thead?.getBoundingClientRect().height || 0;
+    const wrapTop = wrap.getBoundingClientRect().top;
+    const rowTop = row.getBoundingClientRect().top;
+    const offsetInWrap = rowTop - wrapTop + wrap.scrollTop;
+    wrap.scrollTop = Math.max(0, offsetInWrap - headH - row.offsetHeight);
+    scrolledRef.current = true;
+  }, [rows]);
 
   const changeDate = async (oldDate: string, newDate: string) => {
     if (!newDate || oldDate === newDate) return;
-    if (!isAdmin) { alert('날짜 수정은 관리자만 가능합니다'); return; }
+    if (!isAdmin) { alert('날짜 수정 권한이 없습니다'); return; }
     if (rows.some((r) => r.log_date === newDate)) { alert('이미 존재하는 날짜입니다'); return; }
     const res = await fetch(`/api/factory/${factoryId}/change-date`, {
       method: 'POST',
@@ -102,7 +157,7 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
     const row = rows.find((r) => r.log_date === date);
     const isNewValue = row && (row[key] === null || row[key] === undefined);
     if (!isNewValue && !isAdmin) {
-      alert('이미 입력된 값의 수정은 관리자만 가능합니다');
+      alert('이미 입력된 값은 수정 권한이 없습니다');
       return;
     }
     setSaving(date + key);
@@ -116,31 +171,50 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
     setRows(rows.map((r) => r.log_date === date ? { ...r, [key]: num } : r));
   };
 
-  const dateRef = { current: null as HTMLInputElement | null };
+  const currentYear = new Date().getFullYear();
+  const years = Array.from({ length: 7 }, (_, i) => currentYear - 3 + i);
 
   return (
     <div>
       <div className="topbar">
         <h2>{factoryId}공장 설비보전일지</h2>
         <div className="right">
-          <span className="user">{session.name} ({isAdmin ? '관리자' : '입력자'})</span>
-          <button className="add-row-btn" onClick={() => {
-            const input = dateRef.current;
-            if (input) { input.showPicker ? input.showPicker() : input.click(); }
-          }}>+ 행추가</button>
+          <span className="user">{session.name}</span>
+          <div className="year-slider" role="listbox" aria-label="년도 선택">
+            {years.map((y) => (
+              <button
+                key={y}
+                type="button"
+                className={`year-chip${selectedYear === y ? ' selected' : ''}`}
+                onClick={() => fillYear(y)}
+              >{y}</button>
+            ))}
+          </div>
           {isAdmin && (
             <button className="add-col-btn" onClick={() => setShowAddCol(true)}>+ 열추가</button>
           )}
-          <button className="back-btn" onClick={() => router.push('/')} aria-label="뒤로가기">←</button>
+          {isAdmin && (
+            <button
+              type="button"
+              className="upload-btn"
+              disabled={uploading}
+              onClick={() => fileInputRef.current?.click()}
+            >{uploading ? '업로드중…' : '엑셀업로드'}</button>
+          )}
           <input
-            ref={(el) => { dateRef.current = el; }}
-            type="date"
-            style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', width: 0, height: 0 }}
-            onChange={(e) => { if (e.target.value) { addRow(e.target.value); e.target.value = ''; } }}
+            ref={fileInputRef}
+            type="file"
+            accept=".xlsx"
+            style={{ display: 'none' }}
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) { onUploadFile(f); e.target.value = ''; }
+            }}
           />
+          <button className="back-btn" onClick={() => router.push('/')} aria-label="뒤로가기">←</button>
         </div>
       </div>
-      <div className="grid-wrap">
+      <div className="grid-wrap" ref={gridWrapRef}>
         <table className="grid">
           <thead>
             <tr>
@@ -158,10 +232,10 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
           </thead>
           <tbody>
             {rows.length === 0 && (
-              <tr><td colSpan={cols.length + 2} style={{ padding: 20, color: '#888' }}>상단의 "+ 추가"로 날짜를 추가하세요.</td></tr>
+              <tr><td colSpan={cols.length + 2} style={{ padding: 20, color: '#888' }}>상단에서 년도를 선택하면 1월 1일부터 12월 31일까지 행이 채워집니다.</td></tr>
             )}
             {rows.map((r) => (
-              <tr key={r.log_date}>
+              <tr key={r.log_date} data-date={r.log_date}>
                 <th className="date-cell">
                   <DateCell
                     date={r.log_date}
@@ -326,7 +400,7 @@ function DateCell({ date, isAdmin, onChange, onDelete }: { date: string; isAdmin
           aria-label="행 삭제"
         >✕</button>
       )}
-      <button type="button" onClick={() => isAdmin && setEditing(true)} title={isAdmin ? '클릭해서 날짜 변경' : '날짜 변경은 관리자만 가능'}>
+      <button type="button" onClick={() => isAdmin && setEditing(true)} title={isAdmin ? '클릭해서 날짜 변경' : '날짜 변경 권한이 없습니다'}>
         {formatKDate(date)}
       </button>
     </div>

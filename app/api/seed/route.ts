@@ -9,5 +9,5 @@ export async function POST() {
   const pin_hash = hashPin(name, '1234');
   const { error } = await supabaseAdmin.from('users').insert({ name, pin_hash, role: 'admin' });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ message: '관리자 박유신 / PIN 1234 생성됨' });
+  return NextResponse.json({ message: '박유신 / PIN 1234 생성됨' });
 }
