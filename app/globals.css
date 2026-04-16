@@ -180,6 +180,7 @@ html:has(.home), body:has(.home) { background: white; }
   background: white;
   box-shadow: 0 2px 0 var(--blue-pale), 0 2px 4px rgba(0,0,0,0.06);
   transition: transform 0.1s, box-shadow 0.1s;
+  white-space: nowrap;
 }
 .topbar button:active {
   transform: translateY(2px);

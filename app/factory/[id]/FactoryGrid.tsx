@@ -170,7 +170,7 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
   return (
     <div>
       <div className="topbar">
-        <h2>{factoryId}공장 설비보전일지</h2>
+        <h2>{factoryId}공장</h2>
         <div className="right">
           <span className="user">{session.name}</span>
           <YearSelect years={years} value={selectedYear} onChange={fillYear} />
