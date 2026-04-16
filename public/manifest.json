@@ -1,0 +1,14 @@
+{
+  "name": "선호피엔에스 설비보전일지",
+  "short_name": "선호피엔에스",
+  "description": "공장 설비보전일지 입력",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#ffffff",
+  "theme_color": "#2d6cdf",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
