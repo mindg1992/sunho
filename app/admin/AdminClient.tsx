@@ -115,7 +115,7 @@ export default function AdminClient({ users, session }: { users: any[]; session:
         <h3 className="admin-h">새 계정 추가</h3>
         <div className="admin-create">
           <input placeholder="이름" value={name} onChange={(e) => setName(e.target.value)} />
-          <input placeholder="PIN 4자리" maxLength={4} value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))} />
+          <input placeholder="PIN 4자리" type="tel" inputMode="numeric" pattern="[0-9]*" maxLength={4} autoComplete="one-time-code" value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))} />
           <select value={role} onChange={(e) => setRole(e.target.value as any)}>
             <option value="user">입력자</option>
             <option value="admin">관리자</option>
