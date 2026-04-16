@@ -102,7 +102,7 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
     const j = await res.json();
     const summary = (j.result || []).map((r: any) => `${r.sheet} ${r.processed}행`).join(', ');
     alert(`업로드 완료: ${summary}`);
-    router.refresh();
+    window.location.reload();
   };
 
   const fillYear = (year: number) => {

@@ -120,7 +120,7 @@ async function processFactorySheet(
     updated_at: new Date().toISOString(),
   }));
 
-  const { error } = await supabaseAdmin.from(table).upsert(upsertRows);
+  const { error } = await supabaseAdmin.from(table).upsert(upsertRows, { onConflict: 'log_date' });
   if (error) throw new Error(error.message);
   return { processed: updates.length, skipped };
 }
@@ -162,7 +162,7 @@ async function processWeatherSheet(ws: ExcelJS.Worksheet, userName: string): Pro
   }
 
   if (upsertRows.length === 0) return { processed: 0, skipped };
-  const { error } = await supabaseAdmin.from('weather_logs').upsert(upsertRows);
+  const { error } = await supabaseAdmin.from('weather_logs').upsert(upsertRows, { onConflict: 'log_date' });
   if (error) throw new Error(error.message);
   return { processed: upsertRows.length, skipped };
 }
