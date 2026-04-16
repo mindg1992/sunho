@@ -91,15 +91,11 @@ async function processFactorySheet(
     if (!dateStr) { skipped++; continue; }
     const staticPatch: Record<string, any> = {};
     const customPatch: Record<string, any> = {};
-    let hasValue = false;
     colMap.forEach((info, colNum) => {
       const v = parseNum(row.getCell(colNum).value);
-      if (v === null) return;
-      hasValue = true;
       if (info.custom) customPatch[info.key] = v;
       else staticPatch[info.key] = v;
     });
-    if (!hasValue) { skipped++; continue; }
     updates.push({ log_date: dateStr, staticPatch, customPatch });
   }
 
@@ -150,7 +146,6 @@ async function processWeatherSheet(ws: ExcelJS.Worksheet, userName: string): Pro
     const f1 = f1Col ? parseNum(row.getCell(f1Col).value) : null;
     const f2 = f2Col ? parseNum(row.getCell(f2Col).value) : null;
     const txt = txtCol ? cellText(row.getCell(txtCol).value).trim() : '';
-    if (f1 === null && f2 === null && !txt) { skipped++; continue; }
     upsertRows.push({
       log_date: dateStr,
       factory1_workers: f1,
