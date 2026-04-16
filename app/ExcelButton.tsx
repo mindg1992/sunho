@@ -1,5 +1,6 @@
 'use client';
 import { useState } from 'react';
+import YearSelect from './YearSelect';
 
 const ExcelIcon = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -30,15 +31,8 @@ export default function ExcelButton() {
           <div className="modal-box" onClick={(e) => e.stopPropagation()}>
             <h3>엑셀 다운로드</h3>
             <div className="excel-section-label">년도</div>
-            <div className="year-slider excel-year-slider">
-              {years.map((y) => (
-                <button
-                  key={y}
-                  type="button"
-                  className={`year-chip${year === y ? ' selected' : ''}`}
-                  onClick={() => setYear(y)}
-                >{y}</button>
-              ))}
+            <div className="excel-year-row">
+              <YearSelect years={years} value={year} onChange={setYear} />
             </div>
             <div className="excel-section-label">다운로드 대상</div>
             <div className="excel-dl-row">

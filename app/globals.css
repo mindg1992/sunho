@@ -195,42 +195,66 @@ html:has(.home), body:has(.home) { background: white; }
 }
 .topbar .user { font-size: 12px; color: rgba(255,255,255,0.85); }
 
-/* 년도 선택 슬라이딩 박스 */
-.year-slider {
-  display: flex; gap: 6px;
-  overflow-x: auto; overflow-y: hidden;
-  padding: 2px;
-  max-width: 200px;
-  scroll-snap-type: x mandatory;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
+/* 년도 선택 드롭다운 */
+.year-dropdown {
+  position: relative;
+  display: inline-block;
 }
-.year-slider::-webkit-scrollbar { display: none; }
-.year-slider button.year-chip,
-.modal-box button.year-chip {
-  flex: 0 0 auto;
-  padding: 6px 12px; min-height: 34px;
+button.year-dropdown-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 14px; min-height: 38px;
   font-size: 13px; font-weight: 700; letter-spacing: 0.3px;
   color: var(--blue-deep);
   background: white;
   border: 1.5px solid var(--blue-pale);
-  border-radius: 18px;
-  scroll-snap-align: start;
-  box-shadow: 0 1px 0 var(--blue-pale);
-  transition: transform 0.1s, box-shadow 0.1s, background 0.15s, color 0.15s;
+  border-radius: 9px;
+  box-shadow: 0 2px 0 var(--blue-pale), 0 1px 3px rgba(0,0,0,0.04);
+  cursor: pointer;
+  transition: box-shadow 0.1s, background 0.15s;
+}
+button.year-dropdown-btn:hover { background: var(--blue-mist); }
+button.year-dropdown-btn[aria-expanded="true"] {
+  background: var(--blue-mist);
+  border-color: var(--blue-mid);
+}
+.year-dropdown-caret {
+  font-size: 11px; color: var(--blue-mid);
+  transition: transform 0.15s;
+}
+button.year-dropdown-btn[aria-expanded="true"] .year-dropdown-caret {
+  transform: rotate(180deg);
+}
+.year-dropdown-list {
+  position: absolute; top: calc(100% + 4px); right: 0;
+  list-style: none; margin: 0; padding: 4px;
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 6px 20px rgba(74,111,165,0.18), 0 2px 4px rgba(0,0,0,0.06);
+  z-index: 1100;
+  min-width: 100%;
+  max-height: 60vh; overflow-y: auto;
+  animation: ydd-slide 0.15s ease-out;
+}
+@keyframes ydd-slide {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.year-dropdown-list li { margin: 0; padding: 0; }
+button.year-dropdown-item {
+  display: block; width: 100%;
+  padding: 10px 22px; min-height: 40px;
+  background: white; border: none;
+  font-size: 14px; font-weight: 600;
+  color: var(--ink);
+  text-align: center;
+  border-radius: 6px;
   cursor: pointer;
 }
-.year-slider button.year-chip.selected,
-.modal-box button.year-chip.selected {
+button.year-dropdown-item:hover { background: var(--blue-mist); }
+button.year-dropdown-item.selected {
   background: var(--yellow-mid);
   color: #6b4a0c;
-  border-color: var(--yellow-deep);
-  box-shadow: 0 2px 0 var(--yellow-deep), 0 2px 5px rgba(212,168,58,0.25);
-}
-.year-slider button.year-chip:active,
-.modal-box button.year-chip:active {
-  transform: translateY(1px);
-  box-shadow: 0 0 0 transparent;
 }
 
 /* 엑셀 다운로드 모달 */
@@ -238,7 +262,7 @@ html:has(.home), body:has(.home) { background: white; }
   font-size: 12px; font-weight: 700; color: var(--blue-deep);
   letter-spacing: 0.5px; margin: 6px 0 6px;
 }
-.excel-year-slider { max-width: 100%; margin-bottom: 14px; }
+.excel-year-row { margin-bottom: 14px; }
 .excel-dl-row {
   display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap;
 }
@@ -274,15 +298,20 @@ table.grid th, table.grid td {
   border-right: 1px solid var(--line); border-bottom: 1px solid var(--line);
   padding: 0; min-width: 100px; height: 32px; text-align: center; background: white;
 }
+table.grid thead {
+  position: sticky; top: 0; z-index: 15;
+}
+table.grid thead tr { position: sticky; top: 0; }
 table.grid thead th {
   position: sticky; top: 0; z-index: 10;
   background: var(--blue-pale);
   color: var(--blue-deep);
   font-weight: 600; height: 56px; padding: 4px 6px;
   white-space: normal; word-break: keep-all; font-size: 13px;
+  box-shadow: inset 0 -1px 0 var(--line);
 }
 table.grid thead th.date-head {
-  position: sticky; left: 0; top: 0; z-index: 20;
+  position: sticky; left: 0; top: 0; z-index: 25;
   background: var(--blue-mid);
   color: white;
   min-width: 110px; max-width: 110px;

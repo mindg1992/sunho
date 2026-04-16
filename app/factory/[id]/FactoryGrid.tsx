@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ColDef, formatKDate } from '@/lib/columns';
+import YearSelect from '@/app/YearSelect';
 
 type Row = Record<string, any>;
 type Props = {
@@ -82,14 +83,6 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
     const res = await fetch(`/api/admin/columns?factory_id=${factoryId}&col_key=${encodeURIComponent(colKey)}`, { method: 'DELETE' });
     if (!res.ok) { alert((await res.json()).error || '삭제 실패'); return; }
     setCols(cols.filter((c) => c.key !== colKey));
-  };
-
-  const removeRow = async (logDate: string) => {
-    if (!isAdmin) return;
-    if (!confirm(`${logDate} 행을 삭제할까요? 해당 날짜의 모든 값이 삭제됩니다.`)) return;
-    const res = await fetch(`/api/factory/${factoryId}/delete-row?log_date=${logDate}`, { method: 'DELETE' });
-    if (!res.ok) { alert((await res.json()).error || '삭제 실패'); return; }
-    setRows(rows.filter((r) => r.log_date !== logDate));
   };
 
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
@@ -180,16 +173,7 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
         <h2>{factoryId}공장 설비보전일지</h2>
         <div className="right">
           <span className="user">{session.name}</span>
-          <div className="year-slider" role="listbox" aria-label="년도 선택">
-            {years.map((y) => (
-              <button
-                key={y}
-                type="button"
-                className={`year-chip${selectedYear === y ? ' selected' : ''}`}
-                onClick={() => fillYear(y)}
-              >{y}</button>
-            ))}
-          </div>
+          <YearSelect years={years} value={selectedYear} onChange={fillYear} />
           {isAdmin && (
             <button className="add-col-btn" onClick={() => setShowAddCol(true)}>+ 열추가</button>
           )}
@@ -241,7 +225,6 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
                     date={r.log_date}
                     isAdmin={isAdmin}
                     onChange={(nd) => changeDate(r.log_date, nd)}
-                    onDelete={isAdmin ? () => removeRow(r.log_date) : undefined}
                   />
                 </th>
                 {cols.map((c) => {
@@ -376,7 +359,7 @@ function HeaderCell({ col, isAdmin, onSave, onDelete }: { col: ColDef; isAdmin: 
   );
 }
 
-function DateCell({ date, isAdmin, onChange, onDelete }: { date: string; isAdmin: boolean; onChange: (v: string) => void; onDelete?: () => void }) {
+function DateCell({ date, isAdmin, onChange }: { date: string; isAdmin: boolean; onChange: (v: string) => void }) {
   const [editing, setEditing] = useState(false);
   if (editing && isAdmin) {
     return (
@@ -391,15 +374,6 @@ function DateCell({ date, isAdmin, onChange, onDelete }: { date: string; isAdmin
   }
   return (
     <div className="date-cell-inner">
-      {onDelete && (
-        <button
-          type="button"
-          className="row-del-btn"
-          onClick={(e) => { e.stopPropagation(); e.preventDefault(); onDelete(); }}
-          title="행 삭제"
-          aria-label="행 삭제"
-        >✕</button>
-      )}
       <button type="button" onClick={() => isAdmin && setEditing(true)} title={isAdmin ? '클릭해서 날짜 변경' : '날짜 변경 권한이 없습니다'}>
         {formatKDate(date)}
       </button>

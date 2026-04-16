@@ -18,6 +18,23 @@ function fitWidth(label: string, values: any[] = [], min = 8, max = 40): number 
 
 export const dynamic = 'force-dynamic';
 
+function fillYearDates<T extends { log_date: string }>(
+  year: number,
+  rows: T[],
+  blank: (date: string) => T,
+): T[] {
+  const map = new Map(rows.map((r) => [r.log_date, r]));
+  const filled: T[] = [];
+  const end = new Date(Date.UTC(year, 11, 31));
+  for (let d = new Date(Date.UTC(year, 0, 1)); d.getTime() <= end.getTime(); d.setUTCDate(d.getUTCDate() + 1)) {
+    const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(d.getUTCDate()).padStart(2, '0');
+    const ds = `${d.getUTCFullYear()}-${m}-${day}`;
+    filled.push(map.get(ds) ?? blank(ds));
+  }
+  return filled;
+}
+
 function buildSheet(wb: ExcelJS.Workbook, name: string, cols: ColDef[], rows: any[]) {
   const ws = wb.addWorksheet(name);
 
@@ -132,7 +149,8 @@ export async function GET(req: Request) {
       ...customColDefs,
     ];
     const flat = (rows || []).map((r: any) => ({ ...r, ...(r.custom_values || {}) }));
-    buildSheet(wb, `${target}공장`, cols, flat);
+    const filled = fillYearDates(year, flat, (date) => ({ log_date: date }));
+    buildSheet(wb, `${target}공장`, cols, filled);
     filename = `sunho_${target}공장_${year}.xlsx`;
   } else {
     const { data: wx } = await supabaseAdmin
@@ -140,7 +158,10 @@ export async function GET(req: Request) {
       .select('*')
       .gte('log_date', start).lte('log_date', end)
       .order('log_date');
-    buildWeatherSheet(wb, wx || []);
+    const filled = fillYearDates(year, wx || [], (date) => ({
+      log_date: date, factory1_workers: null, factory2_workers: null, weather_text: null,
+    }));
+    buildWeatherSheet(wb, filled);
     filename = `sunho_날씨_${year}.xlsx`;
   }
 

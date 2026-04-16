@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { formatKDate } from '@/lib/columns';
+import YearSelect from '@/app/YearSelect';
 
 type Row = {
   log_date: string;
@@ -115,14 +116,6 @@ export default function WeatherGrid({ session, initialRows }: { session: { name:
     setRows(rows.map((r) => r.log_date === date ? { ...r, [key]: value, updated_by: session.name } : r));
   };
 
-  const removeRow = async (date: string) => {
-    if (!isAdmin) return;
-    if (!confirm(`${date} 행을 삭제할까요?`)) return;
-    const res = await fetch(`/api/weather?log_date=${encodeURIComponent(date)}`, { method: 'DELETE' });
-    if (!res.ok) { alert((await res.json()).error || '삭제 실패'); return; }
-    setRows(rows.map((r) => r.log_date === date ? blankRow(date) : r));
-  };
-
   const cellValue = (r: Row, key: ColKey) => {
     const v = r[key];
     return v === null || v === undefined ? '' : String(v);
@@ -146,16 +139,7 @@ export default function WeatherGrid({ session, initialRows }: { session: { name:
         <h2>날씨 입력</h2>
         <div className="right">
           <span className="user">{session.name}</span>
-          <div className="year-slider" role="listbox" aria-label="년도 선택">
-            {years.map((y) => (
-              <button
-                key={y}
-                type="button"
-                className={`year-chip${selectedYear === y ? ' selected' : ''}`}
-                onClick={() => fillYear(y)}
-              >{y}</button>
-            ))}
-          </div>
+          <YearSelect years={years} value={selectedYear} onChange={fillYear} />
           {isAdmin && (
             <button
               type="button"
@@ -192,9 +176,6 @@ export default function WeatherGrid({ session, initialRows }: { session: { name:
               <tr key={r.log_date} data-date={r.log_date}>
                 <th className="date-cell">
                   <div className="date-cell-inner">
-                    {isAdmin && (
-                      <button type="button" className="row-del-btn" onClick={() => removeRow(r.log_date)} title="행 삭제" aria-label="행 삭제">✕</button>
-                    )}
                     <button type="button">{formatKDate(r.log_date)}</button>
                   </div>
                 </th>
