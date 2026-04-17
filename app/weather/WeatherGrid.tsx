@@ -172,7 +172,7 @@ export default function WeatherGrid({ session, initialRows }: { session: { name:
             </tr>
           </thead>
           <tbody>
-            {rows.map((r) => (
+            {rows.filter((r) => r.log_date.startsWith(`${selectedYear}-`)).map((r) => (
               <tr key={r.log_date} data-date={r.log_date}>
                 <th className="date-cell">
                   <div className="date-cell-inner">
