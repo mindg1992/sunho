@@ -54,6 +54,13 @@ export default function WeatherGrid({ session, initialRows }: { session: { name:
   const [uploading, setUploading] = useState(false);
   const saveQueuesByDateRef = useRef<Map<string, Promise<void>>>(new Map());
   const pendingDatesRef = useRef<Map<string, number>>(new Map());
+  const [selection, setSelection] = useState<Set<string>>(new Set());
+  const dragAnchorRef = useRef<{ date: string; colKey: ColKey } | null>(null);
+  const isDraggingRef = useRef(false);
+  const mouseDownRef = useRef(false);
+
+  const WEATHER_COLS: ColKey[] = ['factory1_workers', 'factory2_workers', 'weather_text'];
+  const cellId = (date: string, colKey: ColKey) => `${date}|${colKey}`;
 
   const enqueueForDate = (date: string, body: () => Promise<void>): Promise<void> => {
     const prev = saveQueuesByDateRef.current.get(date) || Promise.resolve();
@@ -129,6 +136,57 @@ export default function WeatherGrid({ session, initialRows }: { session: { name:
     return () => {
       try { if (supabase && channel) supabase.removeChannel(channel); } catch {}
     };
+  }, []);
+
+  const computeRange = (anchor: { date: string; colKey: ColKey }, target: { date: string; colKey: ColKey }): Set<string> => {
+    const visibleDates = rows.filter((r) => r.log_date.startsWith(`${selectedYear}-`)).map((r) => r.log_date);
+    const a1 = visibleDates.indexOf(anchor.date);
+    const a2 = visibleDates.indexOf(target.date);
+    const c1 = WEATHER_COLS.indexOf(anchor.colKey);
+    const c2 = WEATHER_COLS.indexOf(target.colKey);
+    if (a1 < 0 || a2 < 0 || c1 < 0 || c2 < 0) return new Set();
+    const r0 = Math.min(a1, a2);
+    const r1 = Math.max(a1, a2);
+    const cc0 = Math.min(c1, c2);
+    const cc1 = Math.max(c1, c2);
+    const set = new Set<string>();
+    for (let i = r0; i <= r1; i++) {
+      for (let j = cc0; j <= cc1; j++) {
+        set.add(cellId(visibleDates[i], WEATHER_COLS[j]));
+      }
+    }
+    return set;
+  };
+
+  const onCellMouseDown = (date: string, colKey: ColKey) => (e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    mouseDownRef.current = true;
+    isDraggingRef.current = false;
+    dragAnchorRef.current = { date, colKey };
+    setSelection(new Set());
+  };
+
+  const onCellMouseEnter = (date: string, colKey: ColKey) => () => {
+    if (!mouseDownRef.current || !dragAnchorRef.current) return;
+    const anchor = dragAnchorRef.current;
+    if (!isDraggingRef.current && anchor.date === date && anchor.colKey === colKey) return;
+    if (!isDraggingRef.current) {
+      isDraggingRef.current = true;
+      if (document.activeElement instanceof HTMLInputElement) {
+        (document.activeElement as HTMLInputElement).blur();
+      }
+    }
+    setSelection(computeRange(anchor, { date, colKey }));
+  };
+
+  useEffect(() => {
+    const onUp = () => {
+      mouseDownRef.current = false;
+      if (!isDraggingRef.current) dragAnchorRef.current = null;
+      isDraggingRef.current = false;
+    };
+    window.addEventListener('mouseup', onUp);
+    return () => window.removeEventListener('mouseup', onUp);
   }, []);
 
   const canEditCell = (row: Row | undefined, key: ColKey): boolean => {
@@ -221,6 +279,35 @@ export default function WeatherGrid({ session, initialRows }: { session: { name:
     return v === null || v === undefined ? '' : String(v);
   };
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (selection.size > 0) setSelection(new Set());
+        return;
+      }
+      if (selection.size === 0) return;
+      const active = document.activeElement;
+      const inputFocused = active instanceof HTMLInputElement && !active.disabled && active.closest('table.grid');
+      if ((e.key === 'Delete' || e.key === 'Backspace') && !inputFocused) {
+        e.preventDefault();
+        for (const id of Array.from(selection)) {
+          const sep = id.indexOf('|');
+          const d = id.slice(0, sep);
+          const k = id.slice(sep + 1) as ColKey;
+          const r = rows.find((x) => x.log_date === d);
+          if (!r) continue;
+          if (!canEditCell(r, k)) continue;
+          const curVal = r[k];
+          if (curVal === null || curVal === undefined || curVal === '') continue;
+          updateCell(d, k, '');
+        }
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selection, rows, isAdmin, session.name, todayStr]);
+
   const moveFocus = (cur: HTMLInputElement) => {
     const all = Array.from(cur.closest('table')!.querySelectorAll<HTMLInputElement>('td input:not(:disabled)'));
     const idx = all.indexOf(cur);
@@ -277,6 +364,7 @@ export default function WeatherGrid({ session, initialRows }: { session: { name:
                   const v = cellValue(r, k);
                   const locked = !canEditCell(r, k);
                   const meta = (r.cell_meta || {})[k];
+                  const isSelected = selection.has(cellId(r.log_date, k));
                   const onLockedClick = () => {
                     if (!locked) return;
                     alert(`[수정 불가 진단]\n저장된 입력자: ${meta?.by ?? '(없음)'}\n저장된 입력일: ${meta?.at ?? '(없음)'}\n현재 사용자: ${session.name}\n오늘 날짜: ${todayStr}`);
@@ -284,18 +372,25 @@ export default function WeatherGrid({ session, initialRows }: { session: { name:
                   return (
                     <td
                       key={k}
+                      className={isSelected ? 'cell-selected' : ''}
                       onClick={onLockedClick}
+                      onMouseDown={onCellMouseDown(r.log_date, k)}
+                      onMouseEnter={onCellMouseEnter(r.log_date, k)}
                       style={locked ? { cursor: 'not-allowed', background: '#f5f5f5' } : undefined}
                     >
                       <input
                         key={`${r.log_date}-${k}-${v}`}
                         defaultValue={v}
                         disabled={locked}
+                        autoComplete="off"
+                        draggable={false}
                         style={locked ? { pointerEvents: 'none' } : undefined}
                         inputMode="numeric"
                         pattern="[0-9]*"
                         maxLength={4}
                         enterKeyHint="next"
+                        onDragStart={(e) => e.preventDefault()}
+                        onDrop={(e) => e.preventDefault()}
                         onFocus={(e) => e.target.select()}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter' || e.key === 'Tab') {
@@ -322,13 +417,17 @@ export default function WeatherGrid({ session, initialRows }: { session: { name:
                   const v = cellValue(r, 'weather_text');
                   const locked = !canEditCell(r, 'weather_text');
                   const meta = (r.cell_meta || {})['weather_text'];
+                  const isSelected = selection.has(cellId(r.log_date, 'weather_text'));
                   const onLockedClick = () => {
                     if (!locked) return;
                     alert(`[수정 불가 진단]\n저장된 입력자: ${meta?.by ?? '(없음)'}\n저장된 입력일: ${meta?.at ?? '(없음)'}\n현재 사용자: ${session.name}\n오늘 날짜: ${todayStr}`);
                   };
                   return (
                     <td
+                      className={isSelected ? 'cell-selected' : ''}
                       onClick={onLockedClick}
+                      onMouseDown={onCellMouseDown(r.log_date, 'weather_text')}
+                      onMouseEnter={onCellMouseEnter(r.log_date, 'weather_text')}
                       style={locked ? { cursor: 'not-allowed', background: '#f5f5f5' } : undefined}
                     >
                       <input
@@ -336,8 +435,12 @@ export default function WeatherGrid({ session, initialRows }: { session: { name:
                         type="text"
                         defaultValue={v}
                         disabled={locked}
+                        autoComplete="off"
+                        draggable={false}
                         style={locked ? { pointerEvents: 'none' } : undefined}
                         enterKeyHint="next"
+                        onDragStart={(e) => e.preventDefault()}
+                        onDrop={(e) => e.preventDefault()}
                         onFocus={(e) => e.target.select()}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter' || e.key === 'Tab') {
