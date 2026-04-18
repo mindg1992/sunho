@@ -91,6 +91,7 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
   const scrolledRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
 
   const onUploadFile = async (file: File) => {
     if (!confirm(`"${file.name}" 파일을 업로드하면 데이터가 채워집니다. 계속할까요?`)) return;
@@ -161,25 +162,28 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
       return;
     }
     setSaving(date + key);
-    const res = await fetch(`/api/factory/${factoryId}/upsert`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ log_date: date, values: { [key]: num } }),
+    const run = saveQueueRef.current.then(async () => {
+      const res = await fetch(`/api/factory/${factoryId}/upsert`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ log_date: date, values: { [key]: num } }),
+      });
+      const body = await res.json().catch(() => ({} as any));
+      if (!res.ok) {
+        alert(body.error || '저장 실패');
+        resetInput();
+        return;
+      }
+      const stamp = { by: session.name, at: todayStr };
+      setRows((prev) => prev.map((r) => {
+        if (r.log_date !== date) return r;
+        const baseMeta = body.cell_meta ?? r.cell_meta ?? {};
+        const nextMeta = { ...baseMeta, [key]: stamp };
+        return { ...r, [key]: num, cell_meta: nextMeta };
+      }));
     });
-    setSaving('');
-    const body = await res.json().catch(() => ({} as any));
-    if (!res.ok) {
-      alert(body.error || '저장 실패');
-      resetInput();
-      return;
-    }
-    const stamp = { by: session.name, at: todayStr };
-    setRows((prev) => prev.map((r) => {
-      if (r.log_date !== date) return r;
-      const baseMeta = body.cell_meta ?? r.cell_meta ?? {};
-      const nextMeta = { ...baseMeta, [key]: stamp };
-      return { ...r, [key]: num, cell_meta: nextMeta };
-    }));
+    saveQueueRef.current = run.catch(() => {});
+    try { await run; } finally { setSaving(''); }
   };
 
   const currentYear = new Date().getFullYear();
