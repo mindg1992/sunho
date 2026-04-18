@@ -194,6 +194,29 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
   const currentYear = new Date().getFullYear();
   const years = Array.from({ length: 7 }, (_, i) => currentYear - 3 + i);
 
+  const navigate = (cur: HTMLInputElement, dRow: number, dCol: number) => {
+    const curDate = cur.getAttribute('data-row') || '';
+    const curKey = cur.getAttribute('data-col') || '';
+    const visibleDates = rows.filter((r) => r.log_date.startsWith(`${selectedYear}-`)).map((r) => r.log_date);
+    const dateIdx = visibleDates.indexOf(curDate);
+    const colIdx = cols.findIndex((c) => c.key === curKey);
+    if (dateIdx === -1 || colIdx === -1) return;
+    let ri = dateIdx;
+    let ci = colIdx;
+    for (let step = 0; step < visibleDates.length * Math.max(cols.length, 1) + 2; step++) {
+      ri += dRow;
+      ci += dCol;
+      if (ri < 0 || ri >= visibleDates.length || ci < 0 || ci >= cols.length) return;
+      const sel = `input[data-row="${visibleDates[ri]}"][data-col="${cols[ci].key}"]`;
+      const el = document.querySelector<HTMLInputElement>(sel);
+      if (el && !el.disabled) {
+        el.focus();
+        el.select();
+        return;
+      }
+    }
+  };
+
   return (
     <div>
       <div className="topbar">
@@ -275,29 +298,33 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
                         key={`${r.log_date}-${c.key}-${v ?? ''}`}
                         defaultValue={v ?? ''}
                         disabled={locked}
+                        autoComplete="off"
                         style={locked ? { pointerEvents: 'none' } : undefined}
                         inputMode="decimal"
                         enterKeyHint="next"
                         data-row={r.log_date}
                         data-col={c.key}
+                        onFocus={(e) => e.target.select()}
                         onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === 'Tab') {
-                            e.preventDefault();
-                            const cur = e.currentTarget;
-                            cur.blur();
-                            const allInputs = Array.from(
-                              cur.closest('table')!.querySelectorAll<HTMLInputElement>('td input:not(:disabled)')
-                            );
-                            const idx = allInputs.indexOf(cur);
-                            if (idx >= 0 && idx < allInputs.length - 1) {
-                              allInputs[idx + 1].focus();
-                            }
-                          }
+                          const navKeys = ['Enter', 'Tab', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
+                          if (!navKeys.includes(e.key)) return;
+                          e.preventDefault();
+                          const cur = e.currentTarget;
+                          cur.blur();
+                          let dRow = 0;
+                          let dCol = 0;
+                          if (e.key === 'Enter') dRow = 1;
+                          else if (e.key === 'Tab') dCol = e.shiftKey ? -1 : 1;
+                          else if (e.key === 'ArrowUp') dRow = -1;
+                          else if (e.key === 'ArrowDown') dRow = 1;
+                          else if (e.key === 'ArrowLeft') dCol = -1;
+                          else if (e.key === 'ArrowRight') dCol = 1;
+                          navigate(cur, dRow, dCol);
                         }}
                         onBlur={(e) => {
-                          const val = e.target.value;
-                          if ((v ?? '') === val) return;
-                          if ((v ?? '') === '' && val === '') return;
+                          const val = e.target.value.trim();
+                          const newNum = val === '' ? null : Number(val);
+                          if (!Number.isNaN(newNum) && (newNum ?? null) === (v ?? null)) return;
                           updateCell(r.log_date, c.key, val, e.target);
                         }}
                       />
