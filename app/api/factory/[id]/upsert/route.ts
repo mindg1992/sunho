@@ -46,9 +46,9 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       cell_meta: newMeta,
     };
     if (Object.keys(customPatch).length > 0) insertRow.custom_values = customPatch;
-    const { data: inserted, error } = await supabaseAdmin.from(table).insert(insertRow).select('cell_meta').single();
+    const { error } = await supabaseAdmin.from(table).insert(insertRow);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    return NextResponse.json({ ok: true, created: true, cell_meta: inserted?.cell_meta || newMeta });
+    return NextResponse.json({ ok: true, created: true, cell_meta: newMeta });
   }
 
   // 권한 체크: 비관리자는 본인이 당일 입력한 셀만 수정 가능. 빈 값은 누구나 입력 가능.
@@ -87,7 +87,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   if (Object.keys(customPatch).length > 0) {
     patch.custom_values = { ...existingCustom, ...customPatch };
   }
-  const { data: updated, error } = await supabaseAdmin.from(table).update(patch).eq('log_date', log_date).select('cell_meta').single();
+  const { error } = await supabaseAdmin.from(table).update(patch).eq('log_date', log_date);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ ok: true, cell_meta: updated?.cell_meta || mergedMeta });
+  return NextResponse.json({ ok: true, cell_meta: mergedMeta });
 }

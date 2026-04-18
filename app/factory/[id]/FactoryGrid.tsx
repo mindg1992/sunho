@@ -173,10 +173,11 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
       resetInput();
       return;
     }
-    const serverMeta = body.cell_meta;
+    const stamp = { by: session.name, at: todayStr };
     setRows((prev) => prev.map((r) => {
       if (r.log_date !== date) return r;
-      const nextMeta = serverMeta ?? { ...(r.cell_meta || {}), [key]: { by: session.name, at: todayStr } };
+      const baseMeta = body.cell_meta ?? r.cell_meta ?? {};
+      const nextMeta = { ...baseMeta, [key]: stamp };
       return { ...r, [key]: num, cell_meta: nextMeta };
     }));
   };
