@@ -258,12 +258,8 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
   useEffect(() => {
     if (pendingCount > 0) {
       setSaveStatus('saving');
-      return;
-    }
-    if (saveStatus === 'saving') {
+    } else if (saveStatus === 'saving') {
       setSaveStatus('done');
-      const t = setTimeout(() => setSaveStatus('idle'), 1800);
-      return () => clearTimeout(t);
     }
   }, [pendingCount, saveStatus]);
 
