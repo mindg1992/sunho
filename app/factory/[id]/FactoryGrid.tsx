@@ -96,6 +96,7 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
   const [uploading, setUploading] = useState(false);
   const saveQueuesByDateRef = useRef<Map<string, Promise<void>>>(new Map());
   const pendingSavesRef = useRef(0);
+  const pendingDatesRef = useRef<Map<string, number>>(new Map());
 
   const enqueueForDate = (date: string, body: () => Promise<void>): Promise<void> => {
     const prev = saveQueuesByDateRef.current.get(date) || Promise.resolve();
@@ -197,6 +198,7 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
     }));
     setSaving(date + key);
     pendingSavesRef.current++;
+    pendingDatesRef.current.set(date, (pendingDatesRef.current.get(date) || 0) + 1);
     setPendingCount(pendingSavesRef.current);
     const revert = () => {
       setRows((prev) => prev.map((r) => {
@@ -242,7 +244,13 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
       alert(`저장 실패 (${maxAttempts}회 재시도): ${lastErr}`);
       revert();
     });
-    try { await run; } finally { setSaving(''); pendingSavesRef.current--; setPendingCount(pendingSavesRef.current); }
+    try { await run; } finally {
+      setSaving('');
+      pendingSavesRef.current--;
+      const n = (pendingDatesRef.current.get(date) || 1) - 1;
+      if (n <= 0) pendingDatesRef.current.delete(date); else pendingDatesRef.current.set(date, n);
+      setPendingCount(pendingSavesRef.current);
+    }
   };
 
   useEffect(() => {
@@ -284,7 +292,10 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
               return;
             }
             if (!newRec?.log_date) return;
-            if (pendingSavesRef.current > 0) { console.log('[realtime] skip apply (local saves in flight)'); return; }
+            if ((pendingDatesRef.current.get(newRec.log_date) || 0) > 0) {
+              console.log('[realtime] skip apply (local save pending for', newRec.log_date, ')');
+              return;
+            }
             setRows((prev) => prev.map((r) => {
               if (r.log_date !== newRec.log_date) return r;
               const cv = newRec.custom_values || {};
@@ -380,6 +391,7 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
     };
     setSaving(date + ':bulk');
     pendingSavesRef.current++;
+    pendingDatesRef.current.set(date, (pendingDatesRef.current.get(date) || 0) + 1);
     setPendingCount(pendingSavesRef.current);
     const run = enqueueForDate(date, async () => {
       const maxAttempts = 4;
@@ -418,7 +430,13 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
       alert(`저장 실패: ${lastErr}`);
       revert();
     });
-    try { await run; } finally { setSaving(''); pendingSavesRef.current--; setPendingCount(pendingSavesRef.current); }
+    try { await run; } finally {
+      setSaving('');
+      pendingSavesRef.current--;
+      const n = (pendingDatesRef.current.get(date) || 1) - 1;
+      if (n <= 0) pendingDatesRef.current.delete(date); else pendingDatesRef.current.set(date, n);
+      setPendingCount(pendingSavesRef.current);
+    }
   };
 
   const onCellMouseDown = (date: string, colKey: string) => (e: React.MouseEvent) => {
