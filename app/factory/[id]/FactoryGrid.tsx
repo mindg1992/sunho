@@ -215,12 +215,11 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
           });
           const body = await res.json().catch(() => ({} as any));
           if (res.ok) {
-            if (body.cell_meta) {
-              setRows((prev) => prev.map((r) => {
-                if (r.log_date !== date) return r;
-                return { ...r, cell_meta: { ...(r.cell_meta || {}), ...body.cell_meta, [key]: stamp } };
-              }));
-            }
+            setRows((prev) => prev.map((r) => {
+              if (r.log_date !== date) return r;
+              const serverEntry = body.cell_meta?.[key];
+              return { ...r, cell_meta: { ...(r.cell_meta || {}), [key]: serverEntry || stamp } };
+            }));
             return;
           }
           if (res.status >= 400 && res.status < 500) {
@@ -333,14 +332,15 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
           });
           const body = await res.json().catch(() => ({} as any));
           if (res.ok) {
-            if (body.cell_meta) {
-              setRows((prev) => prev.map((r) => {
-                if (r.log_date !== date) return r;
-                const merged = { ...(r.cell_meta || {}), ...body.cell_meta };
-                keys.forEach((k) => { merged[k] = stamp; });
-                return { ...r, cell_meta: merged };
-              }));
-            }
+            setRows((prev) => prev.map((r) => {
+              if (r.log_date !== date) return r;
+              const merged = { ...(r.cell_meta || {}) };
+              keys.forEach((k) => {
+                const serverEntry = body.cell_meta?.[k];
+                merged[k] = serverEntry || stamp;
+              });
+              return { ...r, cell_meta: merged };
+            }));
             return;
           }
           if (res.status >= 400 && res.status < 500) {
