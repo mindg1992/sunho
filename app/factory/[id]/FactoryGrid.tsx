@@ -188,28 +188,40 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
       }));
     };
     const run = saveQueueRef.current.then(async () => {
-      try {
-        const res = await fetch(`/api/factory/${factoryId}/upsert`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ log_date: date, values: { [key]: num } }),
-        });
-        const body = await res.json().catch(() => ({} as any));
-        if (!res.ok) {
-          alert(body.error || '저장 실패');
-          revert();
-          return;
+      const maxAttempts = 4;
+      let lastErr = '';
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+          const res = await fetch(`/api/factory/${factoryId}/upsert`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ log_date: date, values: { [key]: num } }),
+          });
+          const body = await res.json().catch(() => ({} as any));
+          if (res.ok) {
+            if (body.cell_meta) {
+              setRows((prev) => prev.map((r) => {
+                if (r.log_date !== date) return r;
+                return { ...r, cell_meta: { ...(r.cell_meta || {}), ...body.cell_meta, [key]: stamp } };
+              }));
+            }
+            return;
+          }
+          if (res.status >= 400 && res.status < 500) {
+            alert(body.error || '저장 실패');
+            revert();
+            return;
+          }
+          lastErr = body.error || `서버 오류 ${res.status}`;
+        } catch (err: any) {
+          lastErr = err?.message || '네트워크 오류';
         }
-        if (body.cell_meta) {
-          setRows((prev) => prev.map((r) => {
-            if (r.log_date !== date) return r;
-            return { ...r, cell_meta: { ...(r.cell_meta || {}), ...body.cell_meta, [key]: stamp } };
-          }));
+        if (attempt < maxAttempts) {
+          await new Promise((r) => setTimeout(r, 300 * attempt));
         }
-      } catch (err) {
-        alert('저장 실패 (네트워크 오류)');
-        revert();
       }
+      alert(`저장 실패 (${maxAttempts}회 재시도): ${lastErr}`);
+      revert();
     });
     saveQueueRef.current = run.catch(() => {});
     try { await run; } finally { setSaving(''); }
@@ -412,11 +424,14 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
                         defaultValue={v ?? ''}
                         disabled={locked}
                         autoComplete="off"
+                        draggable={false}
                         style={locked ? { pointerEvents: 'none' } : undefined}
                         inputMode="decimal"
                         enterKeyHint="next"
                         data-row={r.log_date}
                         data-col={c.key}
+                        onDragStart={(e) => e.preventDefault()}
+                        onDrop={(e) => e.preventDefault()}
                         onFocus={(e) => e.target.select()}
                         onKeyDown={(e) => {
                           const navKeys = ['Enter', 'Tab', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
