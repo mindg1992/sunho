@@ -151,14 +151,20 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
   };
 
   const updateCell = async (date: string, key: string, value: string, inputEl?: HTMLInputElement) => {
+    const trimmed = value.trim();
+    const num = trimmed === '' ? null : Number(trimmed);
+    if (trimmed !== '' && Number.isNaN(num)) {
+      alert('숫자만 입력');
+      const row = rows.find((r) => r.log_date === date);
+      const prev = row ? row[key] : null;
+      if (inputEl) inputEl.value = prev == null ? '' : String(prev);
+      return;
+    }
     const row = rows.find((r) => r.log_date === date);
-    const prev = row ? row[key] : null;
-    const resetInput = () => { if (inputEl) inputEl.value = prev == null ? '' : String(prev); };
-    const num = value === '' ? null : Number(value);
-    if (value !== '' && Number.isNaN(num)) { alert('숫자만 입력'); resetInput(); return; }
     if (!canEditCell(row, key)) {
       alert('이미 입력된 값은 수정 권한이 없습니다 (당일 본인이 입력한 값만 수정 가능)');
-      resetInput();
+      const prev = row ? row[key] : null;
+      if (inputEl) inputEl.value = prev == null ? '' : String(prev);
       return;
     }
     setSaving(date + key);
@@ -171,7 +177,6 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
       const body = await res.json().catch(() => ({} as any));
       if (!res.ok) {
         alert(body.error || '저장 실패');
-        resetInput();
         return;
       }
       const stamp = { by: session.name, at: todayStr };
