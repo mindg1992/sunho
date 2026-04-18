@@ -137,7 +137,7 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
       body: JSON.stringify({ oldDate, newDate }),
     });
     if (!res.ok) { alert((await res.json()).error || '실패'); return; }
-    setRows(rows.map((r) => r.log_date === oldDate ? { ...r, log_date: newDate } : r).sort((a, b) => a.log_date.localeCompare(b.log_date)));
+    setRows((prev) => prev.map((r) => r.log_date === oldDate ? { ...r, log_date: newDate } : r).sort((a, b) => a.log_date.localeCompare(b.log_date)));
   };
 
   const canEditCell = (row: Row | undefined, key: string) => {
@@ -174,7 +174,7 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
       return;
     }
     const serverMeta = body.cell_meta;
-    setRows(rows.map((r) => {
+    setRows((prev) => prev.map((r) => {
       if (r.log_date !== date) return r;
       const nextMeta = serverMeta ?? { ...(r.cell_meta || {}), [key]: { by: session.name, at: todayStr } };
       return { ...r, [key]: num, cell_meta: nextMeta };
