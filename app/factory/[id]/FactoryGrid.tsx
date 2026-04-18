@@ -44,6 +44,7 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
   const [rows, setRows] = useState<Row[]>(() => mergeYearRows(initialRows, new Date().getFullYear(), initialCols));
   const [wx] = useState(weather);
   const [saving, setSaving] = useState('');
+  const [pendingCount, setPendingCount] = useState(0);
   const [showAddCol, setShowAddCol] = useState(false);
   const isAdmin = session.role === 'admin';
   const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' }).format(new Date());
@@ -194,6 +195,7 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
     }));
     setSaving(date + key);
     pendingSavesRef.current++;
+    setPendingCount(pendingSavesRef.current);
     const revert = () => {
       setRows((prev) => prev.map((r) => {
         if (r.log_date !== date) return r;
@@ -238,7 +240,7 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
       alert(`저장 실패 (${maxAttempts}회 재시도): ${lastErr}`);
       revert();
     });
-    try { await run; } finally { setSaving(''); pendingSavesRef.current--; }
+    try { await run; } finally { setSaving(''); pendingSavesRef.current--; setPendingCount(pendingSavesRef.current); }
   };
 
   useEffect(() => {
@@ -320,6 +322,7 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
     };
     setSaving(date + ':bulk');
     pendingSavesRef.current++;
+    setPendingCount(pendingSavesRef.current);
     const run = enqueueForDate(date, async () => {
       const maxAttempts = 4;
       let lastErr = '';
@@ -357,7 +360,7 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
       alert(`저장 실패: ${lastErr}`);
       revert();
     });
-    try { await run; } finally { setSaving(''); pendingSavesRef.current--; }
+    try { await run; } finally { setSaving(''); pendingSavesRef.current--; setPendingCount(pendingSavesRef.current); }
   };
 
   const onCellMouseDown = (date: string, colKey: string) => (e: React.MouseEvent) => {
@@ -453,6 +456,11 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
         <h2>{factoryId}공장</h2>
         <div className="right">
           <span className="user">{session.name}</span>
+          {pendingCount > 0 && (
+            <span className="saving-indicator" title="서버에 저장 요청을 보내고 있어요. 완료 전에 새로고침하면 일부가 저장되지 않을 수 있습니다.">
+              저장 중… ({pendingCount})
+            </span>
+          )}
           <YearSelect years={years} value={selectedYear} onChange={fillYear} />
           {isAdmin && (
             <button className="add-col-btn" onClick={() => setShowAddCol(true)}>+ 열추가</button>
