@@ -178,29 +178,37 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
       return { ...r, [key]: num, cell_meta: nextMeta };
     }));
     setSaving(date + key);
+    const revert = () => {
+      setRows((prev) => prev.map((r) => {
+        if (r.log_date !== date) return r;
+        const newMeta = { ...(r.cell_meta || {}) };
+        if (prevMeta[key]) newMeta[key] = prevMeta[key];
+        else delete newMeta[key];
+        return { ...r, [key]: prevValue, cell_meta: newMeta };
+      }));
+    };
     const run = saveQueueRef.current.then(async () => {
-      const res = await fetch(`/api/factory/${factoryId}/upsert`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ log_date: date, values: { [key]: num } }),
-      });
-      const body = await res.json().catch(() => ({} as any));
-      if (!res.ok) {
-        alert(body.error || '저장 실패');
-        setRows((prev) => prev.map((r) => {
-          if (r.log_date !== date) return r;
-          const newMeta = { ...(r.cell_meta || {}) };
-          if (prevMeta[key]) newMeta[key] = prevMeta[key];
-          else delete newMeta[key];
-          return { ...r, [key]: prevValue, cell_meta: newMeta };
-        }));
-        return;
-      }
-      if (body.cell_meta) {
-        setRows((prev) => prev.map((r) => {
-          if (r.log_date !== date) return r;
-          return { ...r, cell_meta: { ...(r.cell_meta || {}), ...body.cell_meta, [key]: stamp } };
-        }));
+      try {
+        const res = await fetch(`/api/factory/${factoryId}/upsert`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ log_date: date, values: { [key]: num } }),
+        });
+        const body = await res.json().catch(() => ({} as any));
+        if (!res.ok) {
+          alert(body.error || '저장 실패');
+          revert();
+          return;
+        }
+        if (body.cell_meta) {
+          setRows((prev) => prev.map((r) => {
+            if (r.log_date !== date) return r;
+            return { ...r, cell_meta: { ...(r.cell_meta || {}), ...body.cell_meta, [key]: stamp } };
+          }));
+        }
+      } catch (err) {
+        alert('저장 실패 (네트워크 오류)');
+        revert();
       }
     });
     saveQueueRef.current = run.catch(() => {});
