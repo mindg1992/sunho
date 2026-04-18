@@ -91,8 +91,22 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
   const scrolledRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
-  const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const saveQueuesByDateRef = useRef<Map<string, Promise<void>>>(new Map());
   const pendingSavesRef = useRef(0);
+
+  const enqueueForDate = (date: string, body: () => Promise<void>): Promise<void> => {
+    const prev = saveQueuesByDateRef.current.get(date) || Promise.resolve();
+    const run = prev.then(body);
+    const next = run.catch(() => {});
+    saveQueuesByDateRef.current.set(date, next);
+    // Clean up map entry when queue drains
+    next.then(() => {
+      if (saveQueuesByDateRef.current.get(date) === next) {
+        saveQueuesByDateRef.current.delete(date);
+      }
+    });
+    return run;
+  };
   const [selection, setSelection] = useState<Set<string>>(new Set());
   const dragAnchorRef = useRef<{ date: string; colKey: string } | null>(null);
   const isDraggingRef = useRef(false);
@@ -189,7 +203,7 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
         return { ...r, [key]: prevValue, cell_meta: newMeta };
       }));
     };
-    const run = saveQueueRef.current.then(async () => {
+    const run = enqueueForDate(date, async () => {
       const maxAttempts = 4;
       let lastErr = '';
       for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -225,7 +239,6 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
       alert(`저장 실패 (${maxAttempts}회 재시도): ${lastErr}`);
       revert();
     });
-    saveQueueRef.current = run.catch(() => {});
     try { await run; } finally { setSaving(''); pendingSavesRef.current--; }
   };
 
@@ -308,7 +321,7 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
     };
     setSaving(date + ':bulk');
     pendingSavesRef.current++;
-    const run = saveQueueRef.current.then(async () => {
+    const run = enqueueForDate(date, async () => {
       const maxAttempts = 4;
       let lastErr = '';
       for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -344,7 +357,6 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
       alert(`저장 실패: ${lastErr}`);
       revert();
     });
-    saveQueueRef.current = run.catch(() => {});
     try { await run; } finally { setSaving(''); pendingSavesRef.current--; }
   };
 
