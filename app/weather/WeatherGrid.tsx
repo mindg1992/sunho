@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { formatKDate } from '@/lib/columns';
 import YearSelect from '@/app/YearSelect';
+import { getBrowserSupabase } from '@/lib/supabaseBrowser';
 
 type Row = {
   log_date: string;
@@ -10,6 +11,7 @@ type Row = {
   factory1_workers: number | null;
   factory2_workers: number | null;
   updated_by?: string | null;
+  cell_meta?: Record<string, { by: string; at: string }> | null;
 };
 
 type ColKey = 'factory1_workers' | 'factory2_workers' | 'weather_text';
@@ -40,6 +42,7 @@ function mergeYearRows(prev: Row[], year: number): Row[] {
 export default function WeatherGrid({ session, initialRows }: { session: { name: string; role: string }; initialRows: Row[] }) {
   const router = useRouter();
   const isAdmin = session.role === 'admin';
+  const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' }).format(new Date());
   const currentYear = new Date().getFullYear();
   const years = Array.from({ length: 7 }, (_, i) => currentYear - 3 + i);
 
@@ -49,6 +52,21 @@ export default function WeatherGrid({ session, initialRows }: { session: { name:
   const scrolledRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const saveQueuesByDateRef = useRef<Map<string, Promise<void>>>(new Map());
+  const pendingDatesRef = useRef<Map<string, number>>(new Map());
+
+  const enqueueForDate = (date: string, body: () => Promise<void>): Promise<void> => {
+    const prev = saveQueuesByDateRef.current.get(date) || Promise.resolve();
+    const run = prev.then(body);
+    const next = run.catch(() => {});
+    saveQueuesByDateRef.current.set(date, next);
+    next.then(() => {
+      if (saveQueuesByDateRef.current.get(date) === next) {
+        saveQueuesByDateRef.current.delete(date);
+      }
+    });
+    return run;
+  };
 
   const onUploadFile = async (file: File) => {
     if (!confirm(`"${file.name}" 파일을 업로드하면 데이터가 채워집니다. 계속할까요?`)) return;
@@ -74,11 +92,6 @@ export default function WeatherGrid({ session, initialRows }: { session: { name:
     if (rows.length === 0) return;
     const wrap = gridWrapRef.current;
     if (!wrap) return;
-    const today = new Date();
-    const yyyy = today.getFullYear();
-    const mm = String(today.getMonth() + 1).padStart(2, '0');
-    const dd = String(today.getDate()).padStart(2, '0');
-    const todayStr = `${yyyy}-${mm}-${dd}`;
     const row = wrap.querySelector<HTMLElement>(`tr[data-date="${todayStr}"]`);
     if (!row) return;
     const thead = wrap.querySelector<HTMLElement>('thead');
@@ -88,9 +101,46 @@ export default function WeatherGrid({ session, initialRows }: { session: { name:
     const offsetInWrap = rowTop - wrapTop + wrap.scrollTop;
     wrap.scrollTop = Math.max(0, offsetInWrap - headH - row.offsetHeight);
     scrolledRef.current = true;
-  }, [rows]);
+  }, [rows, todayStr]);
 
-  const updateCell = async (date: string, key: ColKey, raw: string) => {
+  useEffect(() => {
+    let channel: any = null;
+    let supabase: any = null;
+    try {
+      supabase = getBrowserSupabase();
+      if (!supabase) return;
+      channel = supabase
+        .channel('rt-weather_logs')
+        .on(
+          'postgres_changes' as any,
+          { event: '*', schema: 'public', table: 'weather_logs' },
+          (payload: any) => {
+            const newRec: any = payload.new;
+            if (!newRec?.log_date) return;
+            if ((pendingDatesRef.current.get(newRec.log_date) || 0) > 0) return;
+            setRows((prev) => prev.map((r) => {
+              if (r.log_date !== newRec.log_date) return r;
+              return { ...r, ...newRec };
+            }));
+          },
+        )
+        .subscribe();
+    } catch {}
+    return () => {
+      try { if (supabase && channel) supabase.removeChannel(channel); } catch {}
+    };
+  }, []);
+
+  const canEditCell = (row: Row | undefined, key: ColKey): boolean => {
+    if (isAdmin) return true;
+    if (!row) return true;
+    const v = row[key];
+    if (v === null || v === undefined || v === '') return true;
+    const meta = (row.cell_meta || {})[key];
+    return !!meta && meta.by === session.name && meta.at === todayStr;
+  };
+
+  const updateCell = async (date: string, key: ColKey, raw: string, inputEl?: HTMLInputElement) => {
     let value: string | number | null;
     if (key === 'weather_text') {
       value = raw === '' ? null : raw;
@@ -99,32 +149,76 @@ export default function WeatherGrid({ session, initialRows }: { session: { name:
       value = trimmed === '' ? null : Number(trimmed);
     }
     const row = rows.find((r) => r.log_date === date);
-    const prev = row ? row[key] : null;
-    const prevEmpty = prev === null || prev === undefined || prev === '';
-    if (!prevEmpty && !isAdmin && value !== prev) {
-      alert('이미 입력된 값은 수정 권한이 없습니다');
+    const prevValue = row ? row[key] : null;
+    const prevMeta = row?.cell_meta || {};
+    const resetInput = () => { if (inputEl) inputEl.value = prevValue == null ? '' : String(prevValue); };
+    if (!canEditCell(row, key)) {
+      alert('이미 입력된 값은 수정 권한이 없습니다 (당일 본인이 입력한 값만 수정 가능)');
+      resetInput();
       return;
     }
-    if (prev === value) return;
+    if ((prevValue ?? null) === (value ?? null)) return;
 
-    const res = await fetch('/api/weather', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ log_date: date, values: { [key]: value } }),
+    const stamp = { by: session.name, at: todayStr };
+    setRows((prev) => prev.map((r) => {
+      if (r.log_date !== date) return r;
+      const nextMeta = { ...(r.cell_meta || {}), [key]: stamp };
+      return { ...r, [key]: value as any, cell_meta: nextMeta };
+    }));
+    pendingDatesRef.current.set(date, (pendingDatesRef.current.get(date) || 0) + 1);
+    const revert = () => {
+      setRows((prev) => prev.map((r) => {
+        if (r.log_date !== date) return r;
+        const newMeta = { ...(r.cell_meta || {}) };
+        if (prevMeta[key]) newMeta[key] = prevMeta[key];
+        else delete newMeta[key];
+        return { ...r, [key]: prevValue as any, cell_meta: newMeta };
+      }));
+    };
+    const run = enqueueForDate(date, async () => {
+      const maxAttempts = 4;
+      let lastErr = '';
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+          const res = await fetch('/api/weather', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ log_date: date, values: { [key]: value } }),
+          });
+          const body = await res.json().catch(() => ({} as any));
+          if (res.ok) {
+            if (body.cell_meta) {
+              setRows((prev) => prev.map((r) => {
+                if (r.log_date !== date) return r;
+                const serverEntry = body.cell_meta?.[key];
+                return { ...r, cell_meta: { ...(r.cell_meta || {}), [key]: serverEntry || stamp }, updated_by: session.name };
+              }));
+            }
+            return;
+          }
+          if (res.status >= 400 && res.status < 500) {
+            alert(body.error || '저장 실패');
+            revert();
+            return;
+          }
+          lastErr = body.error || `서버 오류 ${res.status}`;
+        } catch (err: any) {
+          lastErr = err?.message || '네트워크 오류';
+        }
+        if (attempt < maxAttempts) await new Promise((r) => setTimeout(r, 300 * attempt));
+      }
+      alert(`저장 실패: ${lastErr}`);
+      revert();
     });
-    if (!res.ok) { alert((await res.json()).error || '저장 실패'); return; }
-    setRows(rows.map((r) => r.log_date === date ? { ...r, [key]: value, updated_by: session.name } : r));
+    try { await run; } finally {
+      const n = (pendingDatesRef.current.get(date) || 1) - 1;
+      if (n <= 0) pendingDatesRef.current.delete(date); else pendingDatesRef.current.set(date, n);
+    }
   };
 
   const cellValue = (r: Row, key: ColKey) => {
     const v = r[key];
     return v === null || v === undefined ? '' : String(v);
-  };
-
-  const isLocked = (r: Row, key: ColKey) => {
-    if (isAdmin) return false;
-    const v = r[key];
-    return v !== null && v !== undefined && v !== '';
   };
 
   const moveFocus = (cur: HTMLInputElement) => {
@@ -181,16 +275,28 @@ export default function WeatherGrid({ session, initialRows }: { session: { name:
                 </th>
                 {(['factory1_workers', 'factory2_workers'] as ColKey[]).map((k) => {
                   const v = cellValue(r, k);
-                  const locked = isLocked(r, k);
+                  const locked = !canEditCell(r, k);
+                  const meta = (r.cell_meta || {})[k];
+                  const onLockedClick = () => {
+                    if (!locked) return;
+                    alert(`[수정 불가 진단]\n저장된 입력자: ${meta?.by ?? '(없음)'}\n저장된 입력일: ${meta?.at ?? '(없음)'}\n현재 사용자: ${session.name}\n오늘 날짜: ${todayStr}`);
+                  };
                   return (
-                    <td key={k}>
+                    <td
+                      key={k}
+                      onClick={onLockedClick}
+                      style={locked ? { cursor: 'not-allowed', background: '#f5f5f5' } : undefined}
+                    >
                       <input
+                        key={`${r.log_date}-${k}-${v}`}
                         defaultValue={v}
                         disabled={locked}
+                        style={locked ? { pointerEvents: 'none' } : undefined}
                         inputMode="numeric"
                         pattern="[0-9]*"
                         maxLength={4}
                         enterKeyHint="next"
+                        onFocus={(e) => e.target.select()}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter' || e.key === 'Tab') {
                             e.preventDefault();
@@ -206,7 +312,7 @@ export default function WeatherGrid({ session, initialRows }: { session: { name:
                         onBlur={(e) => {
                           const val = e.target.value;
                           if (v === val) return;
-                          updateCell(r.log_date, k, val);
+                          updateCell(r.log_date, k, val, e.target);
                         }}
                       />
                     </td>
@@ -214,14 +320,25 @@ export default function WeatherGrid({ session, initialRows }: { session: { name:
                 })}
                 {(() => {
                   const v = cellValue(r, 'weather_text');
-                  const locked = isLocked(r, 'weather_text');
+                  const locked = !canEditCell(r, 'weather_text');
+                  const meta = (r.cell_meta || {})['weather_text'];
+                  const onLockedClick = () => {
+                    if (!locked) return;
+                    alert(`[수정 불가 진단]\n저장된 입력자: ${meta?.by ?? '(없음)'}\n저장된 입력일: ${meta?.at ?? '(없음)'}\n현재 사용자: ${session.name}\n오늘 날짜: ${todayStr}`);
+                  };
                   return (
-                    <td>
+                    <td
+                      onClick={onLockedClick}
+                      style={locked ? { cursor: 'not-allowed', background: '#f5f5f5' } : undefined}
+                    >
                       <input
+                        key={`${r.log_date}-weather_text-${v}`}
                         type="text"
                         defaultValue={v}
                         disabled={locked}
+                        style={locked ? { pointerEvents: 'none' } : undefined}
                         enterKeyHint="next"
+                        onFocus={(e) => e.target.select()}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter' || e.key === 'Tab') {
                             e.preventDefault();
@@ -233,7 +350,7 @@ export default function WeatherGrid({ session, initialRows }: { session: { name:
                         onBlur={(e) => {
                           const val = e.target.value;
                           if (v === val) return;
-                          updateCell(r.log_date, 'weather_text', val);
+                          updateCell(r.log_date, 'weather_text', val, e.target);
                         }}
                       />
                     </td>
