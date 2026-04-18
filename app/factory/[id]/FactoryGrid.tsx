@@ -513,27 +513,24 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selection, rows, cols, isAdmin, session.name, todayStr]);
 
-  const navigate = (cur: HTMLInputElement, dRow: number, dCol: number) => {
+  const findNeighborInput = (cur: HTMLInputElement, dRow: number, dCol: number): HTMLInputElement | null => {
     const curDate = cur.getAttribute('data-row') || '';
     const curKey = cur.getAttribute('data-col') || '';
     const visibleDates = rows.filter((r) => r.log_date.startsWith(`${selectedYear}-`)).map((r) => r.log_date);
     const dateIdx = visibleDates.indexOf(curDate);
     const colIdx = cols.findIndex((c) => c.key === curKey);
-    if (dateIdx === -1 || colIdx === -1) return;
+    if (dateIdx === -1 || colIdx === -1) return null;
     let ri = dateIdx;
     let ci = colIdx;
     for (let step = 0; step < visibleDates.length * Math.max(cols.length, 1) + 2; step++) {
       ri += dRow;
       ci += dCol;
-      if (ri < 0 || ri >= visibleDates.length || ci < 0 || ci >= cols.length) return;
+      if (ri < 0 || ri >= visibleDates.length || ci < 0 || ci >= cols.length) return null;
       const sel = `input[data-row="${visibleDates[ri]}"][data-col="${cols[ci].key}"]`;
       const el = document.querySelector<HTMLInputElement>(sel);
-      if (el && !el.disabled) {
-        el.focus();
-        el.select();
-        return;
-      }
+      if (el && !el.disabled) return el;
     }
+    return null;
   };
 
   return (
@@ -644,7 +641,6 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
                           if (!navKeys.includes(e.key)) return;
                           e.preventDefault();
                           const cur = e.currentTarget;
-                          cur.blur();
                           let dRow = 0;
                           let dCol = 0;
                           if (e.key === 'Enter') {
@@ -661,7 +657,11 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
                           else if (e.key === 'ArrowDown') dRow = 1;
                           else if (e.key === 'ArrowLeft') dCol = -1;
                           else if (e.key === 'ArrowRight') dCol = 1;
-                          navigate(cur, dRow, dCol);
+                          const target = findNeighborInput(cur, dRow, dCol);
+                          if (!target) return;
+                          cur.blur();
+                          target.focus();
+                          target.select();
                         }}
                         onBlur={(e) => {
                           const val = e.target.value.trim();

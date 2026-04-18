@@ -308,27 +308,24 @@ export default function WeatherGrid({ session, initialRows }: { session: { name:
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selection, rows, isAdmin, session.name, todayStr]);
 
-  const navigate = (cur: HTMLInputElement, dRow: number, dCol: number) => {
+  const findNeighborInput = (cur: HTMLInputElement, dRow: number, dCol: number): HTMLInputElement | null => {
     const curDate = cur.getAttribute('data-row') || '';
     const curKey = cur.getAttribute('data-col') as ColKey;
     const visibleDates = rows.filter((r) => r.log_date.startsWith(`${selectedYear}-`)).map((r) => r.log_date);
     const dateIdx = visibleDates.indexOf(curDate);
     const colIdx = WEATHER_COLS.indexOf(curKey);
-    if (dateIdx === -1 || colIdx === -1) return;
+    if (dateIdx === -1 || colIdx === -1) return null;
     let ri = dateIdx;
     let ci = colIdx;
     for (let step = 0; step < visibleDates.length * WEATHER_COLS.length + 2; step++) {
       ri += dRow;
       ci += dCol;
-      if (ri < 0 || ri >= visibleDates.length || ci < 0 || ci >= WEATHER_COLS.length) return;
+      if (ri < 0 || ri >= visibleDates.length || ci < 0 || ci >= WEATHER_COLS.length) return null;
       const sel = `input[data-row="${visibleDates[ri]}"][data-col="${WEATHER_COLS[ci]}"]`;
       const el = document.querySelector<HTMLInputElement>(sel);
-      if (el && !el.disabled) {
-        el.focus();
-        el.select();
-        return;
-      }
+      if (el && !el.disabled) return el;
     }
+    return null;
   };
 
   const handleCellKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -336,7 +333,6 @@ export default function WeatherGrid({ session, initialRows }: { session: { name:
     if (!navKeys.includes(e.key)) return;
     e.preventDefault();
     const cur = e.currentTarget;
-    cur.blur();
     let dRow = 0;
     let dCol = 0;
     if (e.key === 'Enter') {
@@ -352,7 +348,11 @@ export default function WeatherGrid({ session, initialRows }: { session: { name:
     else if (e.key === 'ArrowDown') dRow = 1;
     else if (e.key === 'ArrowLeft') dCol = -1;
     else if (e.key === 'ArrowRight') dCol = 1;
-    navigate(cur, dRow, dCol);
+    const target = findNeighborInput(cur, dRow, dCol);
+    if (!target) return;
+    cur.blur();
+    target.focus();
+    target.select();
   };
 
   return (
