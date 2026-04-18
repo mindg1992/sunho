@@ -342,6 +342,13 @@ table.grid td input:focus {
   box-shadow: inset 0 0 0 2px var(--yellow-mid);
 }
 table.grid td input:disabled { color: #222; -webkit-text-fill-color: #222; opacity: 1; }
+table.grid td.cell-selected { background: #cfe2ff !important; box-shadow: inset 0 0 0 1px #2d6cdf; }
+table.grid td.cell-selected input { background: transparent; }
+table.grid td.cell-selected.tint-green,
+table.grid td.cell-selected.tint-orange,
+table.grid td.cell-selected.tint-pink,
+table.grid td.cell-selected.tint-blue,
+table.grid td.cell-selected.tint-purple { background: #9ec5fe !important; }
 table.grid tbody th.date-cell button {
   background: transparent; border: none; font-size: 13px; width: 100%; height: 100%;
   text-align: left; padding: 2px 8px; color: var(--blue-deep); font-weight: 600;

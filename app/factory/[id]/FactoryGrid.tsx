@@ -92,6 +92,12 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const [selection, setSelection] = useState<Set<string>>(new Set());
+  const dragAnchorRef = useRef<{ date: string; colKey: string } | null>(null);
+  const isDraggingRef = useRef(false);
+  const mouseDownRef = useRef(false);
+
+  const cellId = (date: string, colKey: string) => `${date}|${colKey}`;
 
   const onUploadFile = async (file: File) => {
     if (!confirm(`"${file.name}" 파일을 업로드하면 데이터가 채워집니다. 계속할까요?`)) return;
@@ -181,17 +187,19 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
       const body = await res.json().catch(() => ({} as any));
       if (!res.ok) {
         alert(body.error || '저장 실패');
-        // Revert optimistic update
         setRows((prev) => prev.map((r) => {
           if (r.log_date !== date) return r;
-          return { ...r, [key]: prevValue, cell_meta: prevMeta };
+          const newMeta = { ...(r.cell_meta || {}) };
+          if (prevMeta[key]) newMeta[key] = prevMeta[key];
+          else delete newMeta[key];
+          return { ...r, [key]: prevValue, cell_meta: newMeta };
         }));
         return;
       }
       if (body.cell_meta) {
         setRows((prev) => prev.map((r) => {
           if (r.log_date !== date) return r;
-          return { ...r, cell_meta: { ...body.cell_meta, [key]: stamp } };
+          return { ...r, cell_meta: { ...(r.cell_meta || {}), ...body.cell_meta, [key]: stamp } };
         }));
       }
     });
@@ -201,6 +209,91 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
 
   const currentYear = new Date().getFullYear();
   const years = Array.from({ length: 7 }, (_, i) => currentYear - 3 + i);
+
+  const visibleDatesForYear = () =>
+    rows.filter((r) => r.log_date.startsWith(`${selectedYear}-`)).map((r) => r.log_date);
+
+  const computeRange = (
+    anchor: { date: string; colKey: string },
+    target: { date: string; colKey: string },
+  ): Set<string> => {
+    const visibleDates = visibleDatesForYear();
+    const a1 = visibleDates.indexOf(anchor.date);
+    const a2 = visibleDates.indexOf(target.date);
+    const c1 = cols.findIndex((c) => c.key === anchor.colKey);
+    const c2 = cols.findIndex((c) => c.key === target.colKey);
+    if (a1 < 0 || a2 < 0 || c1 < 0 || c2 < 0) return new Set();
+    const r0 = Math.min(a1, a2);
+    const r1 = Math.max(a1, a2);
+    const cc0 = Math.min(c1, c2);
+    const cc1 = Math.max(c1, c2);
+    const set = new Set<string>();
+    for (let i = r0; i <= r1; i++) {
+      for (let j = cc0; j <= cc1; j++) {
+        set.add(cellId(visibleDates[i], cols[j].key));
+      }
+    }
+    return set;
+  };
+
+  const onCellMouseDown = (date: string, colKey: string) => (e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    mouseDownRef.current = true;
+    isDraggingRef.current = false;
+    dragAnchorRef.current = { date, colKey };
+    setSelection(new Set());
+  };
+
+  const onCellMouseEnter = (date: string, colKey: string) => () => {
+    if (!mouseDownRef.current || !dragAnchorRef.current) return;
+    const anchor = dragAnchorRef.current;
+    if (!isDraggingRef.current && anchor.date === date && anchor.colKey === colKey) return;
+    if (!isDraggingRef.current) {
+      isDraggingRef.current = true;
+      if (document.activeElement instanceof HTMLInputElement) {
+        (document.activeElement as HTMLInputElement).blur();
+      }
+    }
+    setSelection(computeRange(anchor, { date, colKey }));
+  };
+
+  useEffect(() => {
+    const onUp = () => {
+      mouseDownRef.current = false;
+      if (!isDraggingRef.current) dragAnchorRef.current = null;
+      isDraggingRef.current = false;
+    };
+    window.addEventListener('mouseup', onUp);
+    return () => window.removeEventListener('mouseup', onUp);
+  }, []);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (selection.size > 0) setSelection(new Set());
+        return;
+      }
+      if (selection.size === 0) return;
+      const active = document.activeElement;
+      const inputFocused = active instanceof HTMLInputElement && !active.disabled && active.closest('table.grid');
+      if ((e.key === 'Delete' || e.key === 'Backspace') && !inputFocused) {
+        e.preventDefault();
+        for (const id of Array.from(selection)) {
+          const sep = id.indexOf('|');
+          const d = id.slice(0, sep);
+          const k = id.slice(sep + 1);
+          const r = rows.find((x) => x.log_date === d);
+          if (!r) continue;
+          if (!canEditCell(r, k)) continue;
+          if (r[k] === null || r[k] === undefined) continue;
+          updateCell(d, k, '', undefined);
+        }
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selection, rows, cols, isAdmin, session.name, todayStr]);
 
   const navigate = (cur: HTMLInputElement, dRow: number, dCol: number) => {
     const curDate = cur.getAttribute('data-row') || '';
@@ -290,16 +383,20 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
                   const locked = !canEditCell(r, c.key);
                   const meta = (r.cell_meta || {})[c.key];
                   const title = `by=${meta?.by ?? '없음'}, at=${meta?.at ?? '없음'}, 현재=${session.name}/${todayStr}`;
+                  const isSelected = selection.has(cellId(r.log_date, c.key));
                   const onLockedClick = () => {
                     if (!locked) return;
                     alert(`[수정 불가 진단]\n저장된 입력자: ${meta?.by ?? '(없음)'}\n저장된 입력일: ${meta?.at ?? '(없음)'}\n현재 사용자: ${session.name}\n오늘 날짜: ${todayStr}`);
                   };
+                  const tdClasses = [c.tint ? `tint-${c.tint}` : '', isSelected ? 'cell-selected' : ''].filter(Boolean).join(' ');
                   return (
                     <td
                       key={c.key}
-                      className={c.tint ? `tint-${c.tint}` : ''}
+                      className={tdClasses}
                       title={title}
                       onClick={onLockedClick}
+                      onMouseDown={onCellMouseDown(r.log_date, c.key)}
+                      onMouseEnter={onCellMouseEnter(r.log_date, c.key)}
                       style={locked ? { cursor: 'not-allowed', background: '#f5f5f5' } : undefined}
                     >
                       <input
