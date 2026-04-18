@@ -45,6 +45,7 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
   const [wx] = useState(weather);
   const [saving, setSaving] = useState('');
   const [pendingCount, setPendingCount] = useState(0);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'done'>('idle');
   const [showAddCol, setShowAddCol] = useState(false);
   const isAdmin = session.role === 'admin';
   const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' }).format(new Date());
@@ -254,6 +255,18 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
   }, []);
 
+  useEffect(() => {
+    if (pendingCount > 0) {
+      setSaveStatus('saving');
+      return;
+    }
+    if (saveStatus === 'saving') {
+      setSaveStatus('done');
+      const t = setTimeout(() => setSaveStatus('idle'), 1800);
+      return () => clearTimeout(t);
+    }
+  }, [pendingCount, saveStatus]);
+
   const currentYear = new Date().getFullYear();
   const years = Array.from({ length: 7 }, (_, i) => currentYear - 3 + i);
 
@@ -456,10 +469,13 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
         <h2>{factoryId}공장</h2>
         <div className="right">
           <span className="user">{session.name}</span>
-          {pendingCount > 0 && (
-            <span className="saving-indicator" title="서버에 저장 요청을 보내고 있어요. 완료 전에 새로고침하면 일부가 저장되지 않을 수 있습니다.">
-              저장 중… ({pendingCount})
+          {saveStatus === 'saving' && (
+            <span className="save-badge save-badge-saving" title="서버에 저장 요청을 보내고 있어요. 완료 전에 새로고침하면 일부가 저장되지 않을 수 있습니다.">
+              <span className="save-badge-dot" />저장 중… ({pendingCount})
             </span>
+          )}
+          {saveStatus === 'done' && (
+            <span className="save-badge save-badge-done">✓ 저장 완료</span>
           )}
           <YearSelect years={years} value={selectedYear} onChange={fillYear} />
           {isAdmin && (
