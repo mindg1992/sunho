@@ -92,6 +92,7 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const pendingSavesRef = useRef(0);
   const [selection, setSelection] = useState<Set<string>>(new Set());
   const dragAnchorRef = useRef<{ date: string; colKey: string } | null>(null);
   const isDraggingRef = useRef(false);
@@ -178,6 +179,7 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
       return { ...r, [key]: num, cell_meta: nextMeta };
     }));
     setSaving(date + key);
+    pendingSavesRef.current++;
     const revert = () => {
       setRows((prev) => prev.map((r) => {
         if (r.log_date !== date) return r;
@@ -224,8 +226,19 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
       revert();
     });
     saveQueueRef.current = run.catch(() => {});
-    try { await run; } finally { setSaving(''); }
+    try { await run; } finally { setSaving(''); pendingSavesRef.current--; }
   };
+
+  useEffect(() => {
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (pendingSavesRef.current > 0) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, []);
 
   const currentYear = new Date().getFullYear();
   const years = Array.from({ length: 7 }, (_, i) => currentYear - 3 + i);
@@ -254,6 +267,85 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
       }
     }
     return set;
+  };
+
+  const clearCellsForRow = async (date: string, keys: string[]) => {
+    if (keys.length === 0) return;
+    const row = rows.find((r) => r.log_date === date);
+    if (!row) return;
+    const prevSnapshot: Record<string, any> = {};
+    const prevMetaSnapshot: Record<string, any> = {};
+    const oldMeta = row.cell_meta || {};
+    keys.forEach((k) => {
+      prevSnapshot[k] = row[k];
+      if (oldMeta[k]) prevMetaSnapshot[k] = oldMeta[k];
+    });
+    const stamp = { by: session.name, at: todayStr };
+    setRows((prev) => prev.map((r) => {
+      if (r.log_date !== date) return r;
+      const nextMeta = { ...(r.cell_meta || {}) };
+      const updates: Record<string, any> = {};
+      keys.forEach((k) => {
+        updates[k] = null;
+        nextMeta[k] = stamp;
+      });
+      return { ...r, ...updates, cell_meta: nextMeta };
+    }));
+    const values: Record<string, null> = {};
+    keys.forEach((k) => { values[k] = null; });
+    const revert = () => {
+      setRows((prev) => prev.map((r) => {
+        if (r.log_date !== date) return r;
+        const newMeta = { ...(r.cell_meta || {}) };
+        const updates: Record<string, any> = {};
+        keys.forEach((k) => {
+          updates[k] = prevSnapshot[k];
+          if (prevMetaSnapshot[k]) newMeta[k] = prevMetaSnapshot[k];
+          else delete newMeta[k];
+        });
+        return { ...r, ...updates, cell_meta: newMeta };
+      }));
+    };
+    setSaving(date + ':bulk');
+    pendingSavesRef.current++;
+    const run = saveQueueRef.current.then(async () => {
+      const maxAttempts = 4;
+      let lastErr = '';
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+          const res = await fetch(`/api/factory/${factoryId}/upsert`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ log_date: date, values }),
+          });
+          const body = await res.json().catch(() => ({} as any));
+          if (res.ok) {
+            if (body.cell_meta) {
+              setRows((prev) => prev.map((r) => {
+                if (r.log_date !== date) return r;
+                const merged = { ...(r.cell_meta || {}), ...body.cell_meta };
+                keys.forEach((k) => { merged[k] = stamp; });
+                return { ...r, cell_meta: merged };
+              }));
+            }
+            return;
+          }
+          if (res.status >= 400 && res.status < 500) {
+            alert(body.error || '저장 실패');
+            revert();
+            return;
+          }
+          lastErr = body.error || `서버 오류 ${res.status}`;
+        } catch (err: any) {
+          lastErr = err?.message || '네트워크 오류';
+        }
+        if (attempt < maxAttempts) await new Promise((r) => setTimeout(r, 300 * attempt));
+      }
+      alert(`저장 실패: ${lastErr}`);
+      revert();
+    });
+    saveQueueRef.current = run.catch(() => {});
+    try { await run; } finally { setSaving(''); pendingSavesRef.current--; }
   };
 
   const onCellMouseDown = (date: string, colKey: string) => (e: React.MouseEvent) => {
@@ -298,6 +390,7 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
       const inputFocused = active instanceof HTMLInputElement && !active.disabled && active.closest('table.grid');
       if ((e.key === 'Delete' || e.key === 'Backspace') && !inputFocused) {
         e.preventDefault();
+        const byDate = new Map<string, string[]>();
         for (const id of Array.from(selection)) {
           const sep = id.indexOf('|');
           const d = id.slice(0, sep);
@@ -306,7 +399,11 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
           if (!r) continue;
           if (!canEditCell(r, k)) continue;
           if (r[k] === null || r[k] === undefined) continue;
-          updateCell(d, k, '', undefined);
+          if (!byDate.has(d)) byDate.set(d, []);
+          byDate.get(d)!.push(k);
+        }
+        for (const [d, keys] of Array.from(byDate.entries())) {
+          clearCellsForRow(d, keys);
         }
       }
     };
