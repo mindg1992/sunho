@@ -261,14 +261,16 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
     let supabase: any = null;
     try {
       supabase = getBrowserSupabase();
-      if (!supabase) return;
+      if (!supabase) { console.warn('[realtime] no browser supabase client (check NEXT_PUBLIC_SUPABASE_ANON_KEY)'); return; }
       const table = factoryId === '1' ? 'factory1_logs' : 'factory2_logs';
+      console.log('[realtime] subscribing to', table);
       channel = supabase
         .channel(`rt-${table}`)
         .on(
           'postgres_changes' as any,
           { event: '*', schema: 'public', table },
           (payload: any) => {
+            console.log('[realtime] event', payload.eventType, payload.new?.log_date || payload.old?.log_date);
             const newRec: any = payload.new;
             const oldRec: any = payload.old;
             if (payload.eventType === 'DELETE') {
@@ -282,7 +284,7 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
               return;
             }
             if (!newRec?.log_date) return;
-            if (pendingSavesRef.current > 0) return;
+            if (pendingSavesRef.current > 0) { console.log('[realtime] skip apply (local saves in flight)'); return; }
             setRows((prev) => prev.map((r) => {
               if (r.log_date !== newRec.log_date) return r;
               const cv = newRec.custom_values || {};
@@ -290,7 +292,9 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
             }));
           },
         )
-        .subscribe();
+        .subscribe((status: any, err: any) => {
+          console.log('[realtime] status', status, err || '');
+        });
     } catch (err) {
       console.error('[realtime] subscribe failed', err);
     }
