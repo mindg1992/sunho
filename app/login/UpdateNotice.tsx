@@ -4,8 +4,8 @@ import { useEffect, useState } from 'react';
 const NOTICE_VERSION = '2026-04-18';
 const STORAGE_KEY = 'sunho_update_notice_seen';
 
-const items = [
-  '입력자는 입력 후 수정 불가 → 당일 수정 가능',
+const items: (string | string[])[] = [
+  ['입력자는 입력 후 수정 불가', '→ 당일 수정 가능'],
   'PC 모드 데이터 입력 UI/UX 개선',
   '저장 속도 및 반응 속도 개선',
 ];
@@ -43,7 +43,15 @@ export default function UpdateNotice() {
           {items.map((t, i) => (
             <li key={i}>
               <span className="update-dot">•</span>
-              <span>{t}</span>
+              <span>
+                {Array.isArray(t)
+                  ? t.map((line, j) => (
+                      <span key={j} style={{ display: 'block' }}>
+                        {line}
+                      </span>
+                    ))
+                  : t}
+              </span>
             </li>
           ))}
         </ul>
