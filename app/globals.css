@@ -550,6 +550,63 @@ html:has(.login-wrap), body:has(.login-wrap) { background: white; }
 
 .login-footer { margin-top: 22px; font-size: 12px; color: var(--ink-soft); letter-spacing: 1px; font-weight: 500; }
 
+/* Update notice popup */
+.update-overlay {
+  position: fixed; inset: 0; z-index: 100;
+  background: rgba(30, 48, 80, 0.45);
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+  animation: fadeIn 0.18s ease-out;
+}
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+.update-modal {
+  background: white;
+  width: 100%; max-width: 380px;
+  border-radius: 18px;
+  box-shadow: 0 18px 48px rgba(30, 48, 80, 0.25);
+  padding: 28px 24px 22px;
+  animation: popIn 0.2s ease-out;
+}
+@keyframes popIn {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.update-header { text-align: center; margin-bottom: 20px; }
+.update-badge {
+  display: inline-block; padding: 4px 12px; font-size: 11px; font-weight: 700;
+  color: #6b4a0c; background: var(--yellow-mid);
+  border-radius: 999px; letter-spacing: 1.5px;
+}
+.update-title {
+  margin: 10px 0 4px; font-size: 20px; font-weight: 700;
+  color: var(--blue-deep); letter-spacing: 1px;
+}
+.update-date { margin: 0; font-size: 12px; color: var(--ink-soft); letter-spacing: 1px; }
+.update-list {
+  list-style: none; padding: 16px 14px; margin: 0 0 20px;
+  background: #f7f9fc; border-radius: 12px;
+  border: 1px solid var(--line);
+}
+.update-list li {
+  display: flex; gap: 8px; align-items: flex-start;
+  font-size: 14px; line-height: 1.6; color: var(--ink);
+  padding: 6px 0;
+}
+.update-dot { color: var(--blue-mid); font-weight: 700; flex-shrink: 0; }
+.update-close {
+  width: 100%; padding: 14px; font-size: 15px; font-weight: 700;
+  color: white; border: none; border-radius: 12px;
+  background: var(--blue-mid);
+  box-shadow: 0 3px 0 var(--blue-deep), 0 5px 12px rgba(74,111,165,0.2);
+  transition: transform 0.1s, box-shadow 0.1s, filter 0.15s;
+  letter-spacing: 2px;
+}
+.update-close:hover { filter: brightness(1.04); }
+.update-close:active {
+  transform: translateY(3px);
+  box-shadow: 0 0 0 var(--blue-deep), 0 1px 4px rgba(74,111,165,0.2);
+}
+
 /* ===================== Weather ===================== */
 .weather-wrap {
   max-width: 520px; margin: 20px auto; background: white; padding: 22px;

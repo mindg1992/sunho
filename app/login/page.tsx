@@ -1,5 +1,6 @@
 'use client';
 import LoginForm from './LoginForm';
+import UpdateNotice from './UpdateNotice';
 import { useState, useEffect } from 'react';
 import Image from 'next/image';
 
@@ -18,6 +19,7 @@ export default function LoginPage() {
 
   return (
     <div className="login-wrap">
+      <UpdateNotice />
       <div className="login-card">
         <div className="login-logo">
           <Image src="/logo.png" alt="선호피엔에스" width={88} height={88} priority />
