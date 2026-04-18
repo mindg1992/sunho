@@ -570,7 +570,12 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
                           cur.blur();
                           let dRow = 0;
                           let dCol = 0;
-                          if (e.key === 'Enter') dRow = 1;
+                          if (e.key === 'Enter') {
+                            const isTouch = typeof window !== 'undefined'
+                              && window.matchMedia('(hover: none) and (pointer: coarse)').matches;
+                            if (isTouch) dCol = 1;
+                            else dRow = 1;
+                          }
                           else if (e.key === 'Tab') dCol = e.shiftKey ? -1 : 1;
                           else if (e.key === 'ArrowUp') dRow = -1;
                           else if (e.key === 'ArrowDown') dRow = 1;
