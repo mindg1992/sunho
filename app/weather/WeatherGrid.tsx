@@ -308,10 +308,51 @@ export default function WeatherGrid({ session, initialRows }: { session: { name:
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selection, rows, isAdmin, session.name, todayStr]);
 
-  const moveFocus = (cur: HTMLInputElement) => {
-    const all = Array.from(cur.closest('table')!.querySelectorAll<HTMLInputElement>('td input:not(:disabled)'));
-    const idx = all.indexOf(cur);
-    if (idx >= 0 && idx < all.length - 1) all[idx + 1].focus();
+  const navigate = (cur: HTMLInputElement, dRow: number, dCol: number) => {
+    const curDate = cur.getAttribute('data-row') || '';
+    const curKey = cur.getAttribute('data-col') as ColKey;
+    const visibleDates = rows.filter((r) => r.log_date.startsWith(`${selectedYear}-`)).map((r) => r.log_date);
+    const dateIdx = visibleDates.indexOf(curDate);
+    const colIdx = WEATHER_COLS.indexOf(curKey);
+    if (dateIdx === -1 || colIdx === -1) return;
+    let ri = dateIdx;
+    let ci = colIdx;
+    for (let step = 0; step < visibleDates.length * WEATHER_COLS.length + 2; step++) {
+      ri += dRow;
+      ci += dCol;
+      if (ri < 0 || ri >= visibleDates.length || ci < 0 || ci >= WEATHER_COLS.length) return;
+      const sel = `input[data-row="${visibleDates[ri]}"][data-col="${WEATHER_COLS[ci]}"]`;
+      const el = document.querySelector<HTMLInputElement>(sel);
+      if (el && !el.disabled) {
+        el.focus();
+        el.select();
+        return;
+      }
+    }
+  };
+
+  const handleCellKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    const navKeys = ['Enter', 'Tab', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
+    if (!navKeys.includes(e.key)) return;
+    e.preventDefault();
+    const cur = e.currentTarget;
+    cur.blur();
+    let dRow = 0;
+    let dCol = 0;
+    if (e.key === 'Enter') {
+      const isTouch = typeof window !== 'undefined' && (
+        navigator.maxTouchPoints > 0
+        || 'ontouchstart' in window
+        || window.matchMedia('(pointer: coarse)').matches
+      );
+      if (isTouch) dCol = 1;
+      else dRow = 1;
+    } else if (e.key === 'Tab') dCol = e.shiftKey ? -1 : 1;
+    else if (e.key === 'ArrowUp') dRow = -1;
+    else if (e.key === 'ArrowDown') dRow = 1;
+    else if (e.key === 'ArrowLeft') dCol = -1;
+    else if (e.key === 'ArrowRight') dCol = 1;
+    navigate(cur, dRow, dCol);
   };
 
   return (
@@ -384,6 +425,8 @@ export default function WeatherGrid({ session, initialRows }: { session: { name:
                         disabled={locked}
                         autoComplete="off"
                         draggable={false}
+                        data-row={r.log_date}
+                        data-col={k}
                         style={locked ? { pointerEvents: 'none' } : undefined}
                         inputMode="numeric"
                         pattern="[0-9]*"
@@ -392,14 +435,7 @@ export default function WeatherGrid({ session, initialRows }: { session: { name:
                         onDragStart={(e) => e.preventDefault()}
                         onDrop={(e) => e.preventDefault()}
                         onFocus={(e) => e.target.select()}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === 'Tab') {
-                            e.preventDefault();
-                            const cur = e.currentTarget;
-                            cur.blur();
-                            moveFocus(cur);
-                          }
-                        }}
+                        onKeyDown={handleCellKeyDown}
                         onChange={(e) => {
                           const cleaned = e.target.value.replace(/\D/g, '').slice(0, 4);
                           if (cleaned !== e.target.value) e.target.value = cleaned;
@@ -437,19 +473,14 @@ export default function WeatherGrid({ session, initialRows }: { session: { name:
                         disabled={locked}
                         autoComplete="off"
                         draggable={false}
+                        data-row={r.log_date}
+                        data-col="weather_text"
                         style={locked ? { pointerEvents: 'none' } : undefined}
                         enterKeyHint="next"
                         onDragStart={(e) => e.preventDefault()}
                         onDrop={(e) => e.preventDefault()}
                         onFocus={(e) => e.target.select()}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === 'Tab') {
-                            e.preventDefault();
-                            const cur = e.currentTarget;
-                            cur.blur();
-                            moveFocus(cur);
-                          }
-                        }}
+                        onKeyDown={handleCellKeyDown}
                         onBlur={(e) => {
                           const val = e.target.value;
                           if (v === val) return;
