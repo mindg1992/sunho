@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ColDef, formatKDate } from '@/lib/columns';
 import YearSelect from '@/app/YearSelect';
+import { getBrowserSupabase } from '@/lib/supabase';
 
 type Row = Record<string, any>;
 type Props = {
@@ -254,6 +255,41 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
     window.addEventListener('beforeunload', onBeforeUnload);
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
   }, []);
+
+  useEffect(() => {
+    const supabase = getBrowserSupabase();
+    const table = factoryId === '1' ? 'factory1_logs' : 'factory2_logs';
+    const channel = supabase
+      .channel(`rt-${table}`)
+      .on(
+        'postgres_changes' as any,
+        { event: '*', schema: 'public', table },
+        (payload: any) => {
+          const newRec: any = payload.new;
+          const oldRec: any = payload.old;
+          if (payload.eventType === 'DELETE') {
+            if (!oldRec?.log_date) return;
+            setRows((prev) => prev.map((r) => {
+              if (r.log_date !== oldRec.log_date) return r;
+              const blank: Record<string, any> = { log_date: r.log_date };
+              cols.forEach((c) => (blank[c.key] = null));
+              return blank;
+            }));
+            return;
+          }
+          if (!newRec?.log_date) return;
+          if (pendingSavesRef.current > 0) return;
+          setRows((prev) => prev.map((r) => {
+            if (r.log_date !== newRec.log_date) return r;
+            const cv = newRec.custom_values || {};
+            return { ...r, ...newRec, ...cv };
+          }));
+        },
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [factoryId]);
 
   useEffect(() => {
     if (pendingCount > 0) {
