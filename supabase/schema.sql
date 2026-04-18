@@ -19,6 +19,11 @@ alter table users add column if not exists sort_order int default 100;
 alter table factory1_logs add column if not exists custom_values jsonb default '{}'::jsonb;
 alter table factory2_logs add column if not exists custom_values jsonb default '{}'::jsonb;
 
+-- 셀 단위 입력 메타데이터: { col_key: { by: 'user_name', at: 'YYYY-MM-DD' } }
+-- 비관리자는 자신이 당일 입력한 셀만 수정 가능
+alter table factory1_logs add column if not exists cell_meta jsonb default '{}'::jsonb;
+alter table factory2_logs add column if not exists cell_meta jsonb default '{}'::jsonb;
+
 create table if not exists custom_columns (
   id uuid primary key default gen_random_uuid(),
   factory_id text not null,

@@ -104,17 +104,28 @@ async function processFactorySheet(
   const dates = updates.map((u) => u.log_date);
   const { data: existingRows } = await supabaseAdmin
     .from(table)
-    .select('log_date, custom_values')
+    .select('log_date, custom_values, cell_meta')
     .in('log_date', dates);
-  const existingMap = new Map((existingRows || []).map((r: any) => [r.log_date, r.custom_values || {}]));
+  const existingCustomMap = new Map((existingRows || []).map((r: any) => [r.log_date, r.custom_values || {}]));
+  const existingMetaMap = new Map((existingRows || []).map((r: any) => [r.log_date, r.cell_meta || {}]));
 
-  const upsertRows = updates.map((u) => ({
-    log_date: u.log_date,
-    ...u.staticPatch,
-    custom_values: { ...(existingMap.get(u.log_date) || {}), ...u.customPatch },
-    updated_by: userName,
-    updated_at: new Date().toISOString(),
-  }));
+  const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' }).format(new Date());
+  const metaStamp = { by: userName, at: todayStr };
+
+  const upsertRows = updates.map((u) => {
+    const prevMeta = existingMetaMap.get(u.log_date) || {};
+    const mergedMeta: Record<string, { by: string; at: string }> = { ...prevMeta };
+    Object.keys(u.staticPatch).forEach((k) => { mergedMeta[k] = metaStamp; });
+    Object.keys(u.customPatch).forEach((k) => { mergedMeta[k] = metaStamp; });
+    return {
+      log_date: u.log_date,
+      ...u.staticPatch,
+      custom_values: { ...(existingCustomMap.get(u.log_date) || {}), ...u.customPatch },
+      cell_meta: mergedMeta,
+      updated_by: userName,
+      updated_at: new Date().toISOString(),
+    };
+  });
 
   const { error } = await supabaseAdmin.from(table).upsert(upsertRows, { onConflict: 'log_date' });
   if (error) throw new Error(error.message);

@@ -46,6 +46,7 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
   const [saving, setSaving] = useState('');
   const [showAddCol, setShowAddCol] = useState(false);
   const isAdmin = session.role === 'admin';
+  const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' }).format(new Date());
 
   const updateLabel = async (colKey: string, newLabel: string) => {
     if (!newLabel.trim()) return;
@@ -115,11 +116,6 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
     if (rows.length === 0) return;
     const wrap = gridWrapRef.current;
     if (!wrap) return;
-    const today = new Date();
-    const yyyy = today.getFullYear();
-    const mm = String(today.getMonth() + 1).padStart(2, '0');
-    const dd = String(today.getDate()).padStart(2, '0');
-    const todayStr = `${yyyy}-${mm}-${dd}`;
     const row = wrap.querySelector<HTMLElement>(`tr[data-date="${todayStr}"]`);
     if (!row) return;
     const thead = wrap.querySelector<HTMLElement>('thead');
@@ -144,13 +140,24 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
     setRows(rows.map((r) => r.log_date === oldDate ? { ...r, log_date: newDate } : r).sort((a, b) => a.log_date.localeCompare(b.log_date)));
   };
 
-  const updateCell = async (date: string, key: string, value: string) => {
-    const num = value === '' ? null : Number(value);
-    if (value !== '' && Number.isNaN(num)) { alert('숫자만 입력'); return; }
+  const canEditCell = (row: Row | undefined, key: string) => {
+    if (isAdmin) return true;
+    if (!row) return true;
+    const v = row[key];
+    if (v === null || v === undefined) return true;
+    const meta = (row.cell_meta || {})[key];
+    return !!meta && meta.by === session.name && meta.at === todayStr;
+  };
+
+  const updateCell = async (date: string, key: string, value: string, inputEl?: HTMLInputElement) => {
     const row = rows.find((r) => r.log_date === date);
-    const isNewValue = row && (row[key] === null || row[key] === undefined);
-    if (!isNewValue && !isAdmin) {
-      alert('이미 입력된 값은 수정 권한이 없습니다');
+    const prev = row ? row[key] : null;
+    const resetInput = () => { if (inputEl) inputEl.value = prev == null ? '' : String(prev); };
+    const num = value === '' ? null : Number(value);
+    if (value !== '' && Number.isNaN(num)) { alert('숫자만 입력'); resetInput(); return; }
+    if (!canEditCell(row, key)) {
+      alert('이미 입력된 값은 수정 권한이 없습니다 (당일 본인이 입력한 값만 수정 가능)');
+      resetInput();
       return;
     }
     setSaving(date + key);
@@ -160,8 +167,18 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
       body: JSON.stringify({ log_date: date, values: { [key]: num } }),
     });
     setSaving('');
-    if (!res.ok) { alert((await res.json()).error || '저장 실패'); return; }
-    setRows(rows.map((r) => r.log_date === date ? { ...r, [key]: num } : r));
+    const body = await res.json().catch(() => ({} as any));
+    if (!res.ok) {
+      alert(body.error || '저장 실패');
+      resetInput();
+      return;
+    }
+    const serverMeta = body.cell_meta;
+    setRows(rows.map((r) => {
+      if (r.log_date !== date) return r;
+      const nextMeta = serverMeta ?? { ...(r.cell_meta || {}), [key]: { by: session.name, at: todayStr } };
+      return { ...r, [key]: num, cell_meta: nextMeta };
+    }));
   };
 
   const currentYear = new Date().getFullYear();
@@ -229,12 +246,26 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
                 </th>
                 {cols.map((c) => {
                   const v = r[c.key];
-                  const locked = !isAdmin && v !== null && v !== undefined;
+                  const locked = !canEditCell(r, c.key);
+                  const meta = (r.cell_meta || {})[c.key];
+                  const title = `by=${meta?.by ?? '없음'}, at=${meta?.at ?? '없음'}, 현재=${session.name}/${todayStr}`;
+                  const onLockedClick = () => {
+                    if (!locked) return;
+                    alert(`[수정 불가 진단]\n저장된 입력자: ${meta?.by ?? '(없음)'}\n저장된 입력일: ${meta?.at ?? '(없음)'}\n현재 사용자: ${session.name}\n오늘 날짜: ${todayStr}`);
+                  };
                   return (
-                    <td key={c.key} className={c.tint ? `tint-${c.tint}` : ''}>
+                    <td
+                      key={c.key}
+                      className={c.tint ? `tint-${c.tint}` : ''}
+                      title={title}
+                      onClick={onLockedClick}
+                      style={locked ? { cursor: 'not-allowed', background: '#f5f5f5' } : undefined}
+                    >
                       <input
+                        key={`${r.log_date}-${c.key}-${v ?? ''}`}
                         defaultValue={v ?? ''}
                         disabled={locked}
+                        style={locked ? { pointerEvents: 'none' } : undefined}
                         inputMode="decimal"
                         enterKeyHint="next"
                         data-row={r.log_date}
@@ -257,7 +288,7 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
                           const val = e.target.value;
                           if ((v ?? '') === val) return;
                           if ((v ?? '') === '' && val === '') return;
-                          updateCell(r.log_date, c.key, val);
+                          updateCell(r.log_date, c.key, val, e.target);
                         }}
                       />
                     </td>
