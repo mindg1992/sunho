@@ -257,37 +257,46 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
   }, []);
 
   useEffect(() => {
-    const supabase = getBrowserSupabase();
-    const table = factoryId === '1' ? 'factory1_logs' : 'factory2_logs';
-    const channel = supabase
-      .channel(`rt-${table}`)
-      .on(
-        'postgres_changes' as any,
-        { event: '*', schema: 'public', table },
-        (payload: any) => {
-          const newRec: any = payload.new;
-          const oldRec: any = payload.old;
-          if (payload.eventType === 'DELETE') {
-            if (!oldRec?.log_date) return;
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) return;
+    let channel: any = null;
+    let supabase: any = null;
+    try {
+      supabase = getBrowserSupabase();
+      const table = factoryId === '1' ? 'factory1_logs' : 'factory2_logs';
+      channel = supabase
+        .channel(`rt-${table}`)
+        .on(
+          'postgres_changes' as any,
+          { event: '*', schema: 'public', table },
+          (payload: any) => {
+            const newRec: any = payload.new;
+            const oldRec: any = payload.old;
+            if (payload.eventType === 'DELETE') {
+              if (!oldRec?.log_date) return;
+              setRows((prev) => prev.map((r) => {
+                if (r.log_date !== oldRec.log_date) return r;
+                const blank: Record<string, any> = { log_date: r.log_date };
+                cols.forEach((c) => (blank[c.key] = null));
+                return blank;
+              }));
+              return;
+            }
+            if (!newRec?.log_date) return;
+            if (pendingSavesRef.current > 0) return;
             setRows((prev) => prev.map((r) => {
-              if (r.log_date !== oldRec.log_date) return r;
-              const blank: Record<string, any> = { log_date: r.log_date };
-              cols.forEach((c) => (blank[c.key] = null));
-              return blank;
+              if (r.log_date !== newRec.log_date) return r;
+              const cv = newRec.custom_values || {};
+              return { ...r, ...newRec, ...cv };
             }));
-            return;
-          }
-          if (!newRec?.log_date) return;
-          if (pendingSavesRef.current > 0) return;
-          setRows((prev) => prev.map((r) => {
-            if (r.log_date !== newRec.log_date) return r;
-            const cv = newRec.custom_values || {};
-            return { ...r, ...newRec, ...cv };
-          }));
-        },
-      )
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
+          },
+        )
+        .subscribe();
+    } catch (err) {
+      console.error('[realtime] subscribe failed', err);
+    }
+    return () => {
+      try { if (supabase && channel) supabase.removeChannel(channel); } catch {}
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [factoryId]);
 
