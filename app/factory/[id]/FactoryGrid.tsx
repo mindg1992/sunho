@@ -571,8 +571,11 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
                           let dRow = 0;
                           let dCol = 0;
                           if (e.key === 'Enter') {
-                            const isTouch = typeof window !== 'undefined'
-                              && window.matchMedia('(hover: none) and (pointer: coarse)').matches;
+                            const isTouch = typeof window !== 'undefined' && (
+                              navigator.maxTouchPoints > 0
+                              || 'ontouchstart' in window
+                              || window.matchMedia('(pointer: coarse)').matches
+                            );
                             if (isTouch) dCol = 1;
                             else dRow = 1;
                           }
