@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ColDef, formatKDate } from '@/lib/columns';
 import YearSelect from '@/app/YearSelect';
-import { getBrowserSupabase } from '@/lib/supabase';
+import { getBrowserSupabase } from '@/lib/supabaseBrowser';
 
 type Row = Record<string, any>;
 type Props = {
@@ -257,11 +257,11 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
   }, []);
 
   useEffect(() => {
-    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) return;
     let channel: any = null;
     let supabase: any = null;
     try {
       supabase = getBrowserSupabase();
+      if (!supabase) return;
       const table = factoryId === '1' ? 'factory1_logs' : 'factory2_logs';
       channel = supabase
         .channel(`rt-${table}`)
