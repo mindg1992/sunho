@@ -210,33 +210,38 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
       }));
     };
     const run = enqueueForDate(date, async () => {
+      const supabase = getBrowserSupabase();
+      if (!supabase) {
+        alert('저장 클라이언트 초기화 실패 (anon key 확인 필요)');
+        revert();
+        return;
+      }
       const maxAttempts = 4;
       let lastErr = '';
       for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-        try {
-          const res = await fetch(`/api/factory/${factoryId}/upsert`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ log_date: date, values: { [key]: num } }),
-          });
-          const body = await res.json().catch(() => ({} as any));
-          if (res.ok) {
-            setRows((prev) => prev.map((r) => {
-              if (r.log_date !== date) return r;
-              const serverEntry = body.cell_meta?.[key];
-              return { ...r, cell_meta: { ...(r.cell_meta || {}), [key]: serverEntry || stamp } };
-            }));
-            return;
-          }
-          if (res.status >= 400 && res.status < 500) {
-            alert(body.error || '저장 실패');
-            revert();
-            return;
-          }
-          lastErr = body.error || `서버 오류 ${res.status}`;
-        } catch (err: any) {
-          lastErr = err?.message || '네트워크 오류';
+        const { data, error } = await supabase.rpc('upsert_factory_cell', {
+          p_factory_id: factoryId,
+          p_log_date: date,
+          p_values: { [key]: num },
+          p_by_name: session.name,
+          p_by_role: session.role,
+        });
+        if (!error) {
+          const body: any = data || {};
+          setRows((prev) => prev.map((r) => {
+            if (r.log_date !== date) return r;
+            const serverEntry = body.cell_meta?.[key];
+            return { ...r, cell_meta: { ...(r.cell_meta || {}), [key]: serverEntry || stamp } };
+          }));
+          return;
         }
+        const msg = error.message || '';
+        if (msg.includes('수정 권한') || msg.includes('bad factory')) {
+          alert(msg);
+          revert();
+          return;
+        }
+        lastErr = msg || '저장 오류';
         if (attempt < maxAttempts) {
           await new Promise((r) => setTimeout(r, 300 * attempt));
         }
@@ -394,37 +399,42 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
     pendingDatesRef.current.set(date, (pendingDatesRef.current.get(date) || 0) + 1);
     setPendingCount(pendingSavesRef.current);
     const run = enqueueForDate(date, async () => {
+      const supabase = getBrowserSupabase();
+      if (!supabase) {
+        alert('저장 클라이언트 초기화 실패 (anon key 확인 필요)');
+        revert();
+        return;
+      }
       const maxAttempts = 4;
       let lastErr = '';
       for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-        try {
-          const res = await fetch(`/api/factory/${factoryId}/upsert`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ log_date: date, values }),
-          });
-          const body = await res.json().catch(() => ({} as any));
-          if (res.ok) {
-            setRows((prev) => prev.map((r) => {
-              if (r.log_date !== date) return r;
-              const merged = { ...(r.cell_meta || {}) };
-              keys.forEach((k) => {
-                const serverEntry = body.cell_meta?.[k];
-                merged[k] = serverEntry || stamp;
-              });
-              return { ...r, cell_meta: merged };
-            }));
-            return;
-          }
-          if (res.status >= 400 && res.status < 500) {
-            alert(body.error || '저장 실패');
-            revert();
-            return;
-          }
-          lastErr = body.error || `서버 오류 ${res.status}`;
-        } catch (err: any) {
-          lastErr = err?.message || '네트워크 오류';
+        const { data, error } = await supabase.rpc('upsert_factory_cell', {
+          p_factory_id: factoryId,
+          p_log_date: date,
+          p_values: values,
+          p_by_name: session.name,
+          p_by_role: session.role,
+        });
+        if (!error) {
+          const body: any = data || {};
+          setRows((prev) => prev.map((r) => {
+            if (r.log_date !== date) return r;
+            const merged = { ...(r.cell_meta || {}) };
+            keys.forEach((k) => {
+              const serverEntry = body.cell_meta?.[k];
+              merged[k] = serverEntry || stamp;
+            });
+            return { ...r, cell_meta: merged };
+          }));
+          return;
         }
+        const msg = error.message || '';
+        if (msg.includes('수정 권한') || msg.includes('bad factory')) {
+          alert(msg);
+          revert();
+          return;
+        }
+        lastErr = msg || '저장 오류';
         if (attempt < maxAttempts) await new Promise((r) => setTimeout(r, 300 * attempt));
       }
       alert(`저장 실패: ${lastErr}`);
