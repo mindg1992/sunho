@@ -65,7 +65,7 @@ export function formatKDate(d: string) {
 export function weekendClass(d: string): string {
   const dt = new Date(d + 'T00:00:00');
   const w = dt.getDay();
-  if (w === 6) return 'date-cell-sat';
-  if (w === 0) return 'date-cell-sun';
+  if (w === 6) return 'row-sat';
+  if (w === 0) return 'row-sun';
   return '';
 }

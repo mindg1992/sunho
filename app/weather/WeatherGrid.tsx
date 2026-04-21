@@ -395,8 +395,8 @@ export default function WeatherGrid({ session, initialRows }: { session: { name:
           </thead>
           <tbody>
             {rows.filter((r) => r.log_date.startsWith(`${selectedYear}-`)).map((r) => (
-              <tr key={r.log_date} data-date={r.log_date}>
-                <th className={`date-cell ${weekendClass(r.log_date)}`.trim()}>
+              <tr key={r.log_date} data-date={r.log_date} className={weekendClass(r.log_date)}>
+                <th className="date-cell">
                   <div className="date-cell-inner">
                     <button type="button">{formatKDate(r.log_date)}</button>
                   </div>

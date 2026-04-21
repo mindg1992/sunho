@@ -366,8 +366,10 @@ table.grid tbody th.date-cell {
   font-weight: 600; min-width: 110px; max-width: 110px;
   padding: 0; text-align: left;
 }
-table.grid tbody th.date-cell.date-cell-sat { background: #cfe4fb; }
-table.grid tbody th.date-cell.date-cell-sun { background: #fbd6d6; }
+table.grid tbody tr.row-sat > th.date-cell,
+table.grid tbody tr.row-sat > td { background: #cfe4fb; }
+table.grid tbody tr.row-sun > th.date-cell,
+table.grid tbody tr.row-sun > td { background: #fbd6d6; }
 table.grid td.tint-green { background: #e8f4ea; }
 table.grid td.tint-orange { background: var(--yellow-mist); }
 table.grid td.tint-pink { background: #fce4ec; }

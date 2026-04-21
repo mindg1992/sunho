@@ -593,8 +593,8 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
               <tr><td colSpan={cols.length + 2} style={{ padding: 20, color: '#888' }}>상단에서 년도를 선택하면 1월 1일부터 12월 31일까지 행이 채워집니다.</td></tr>
             )}
             {rows.filter((r) => r.log_date.startsWith(`${selectedYear}-`)).map((r) => (
-              <tr key={r.log_date} data-date={r.log_date}>
-                <th className={`date-cell ${weekendClass(r.log_date)}`.trim()}>
+              <tr key={r.log_date} data-date={r.log_date} className={weekendClass(r.log_date)}>
+                <th className="date-cell">
                   <DateCell
                     date={r.log_date}
                     isAdmin={isAdmin}
