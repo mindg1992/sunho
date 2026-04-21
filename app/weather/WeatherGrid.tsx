@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { formatKDate } from '@/lib/columns';
+import { formatKDate, weekendClass } from '@/lib/columns';
 import YearSelect from '@/app/YearSelect';
 import { getBrowserSupabase } from '@/lib/supabaseBrowser';
 
@@ -396,7 +396,7 @@ export default function WeatherGrid({ session, initialRows }: { session: { name:
           <tbody>
             {rows.filter((r) => r.log_date.startsWith(`${selectedYear}-`)).map((r) => (
               <tr key={r.log_date} data-date={r.log_date}>
-                <th className="date-cell">
+                <th className={`date-cell ${weekendClass(r.log_date)}`.trim()}>
                   <div className="date-cell-inner">
                     <button type="button">{formatKDate(r.log_date)}</button>
                   </div>

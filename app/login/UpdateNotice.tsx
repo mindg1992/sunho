@@ -1,13 +1,14 @@
 'use client';
 import { useEffect, useState } from 'react';
 
-const NOTICE_VERSION = '2026-04-18';
+const NOTICE_VERSION = '2026-04-21';
 const STORAGE_KEY = 'sunho_update_notice_seen';
 
 const items: (string | string[])[] = [
   ['입력자는 입력 후 수정 불가', '→ 당일 수정 가능'],
   'PC 모드 데이터 입력 UI/UX 개선',
   '저장 속도 및 반응 속도 개선',
+  '1·2공장/날씨 표 토요일 파랑·일요일 빨강 음영',
 ];
 
 export default function UpdateNotice() {

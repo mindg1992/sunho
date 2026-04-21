@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ColDef, formatKDate } from '@/lib/columns';
+import { ColDef, formatKDate, weekendClass } from '@/lib/columns';
 import YearSelect from '@/app/YearSelect';
 import { getBrowserSupabase } from '@/lib/supabaseBrowser';
 
@@ -594,7 +594,7 @@ export default function FactoryGrid({ factoryId, cols: initialCols, initialRows,
             )}
             {rows.filter((r) => r.log_date.startsWith(`${selectedYear}-`)).map((r) => (
               <tr key={r.log_date} data-date={r.log_date}>
-                <th className="date-cell">
+                <th className={`date-cell ${weekendClass(r.log_date)}`.trim()}>
                   <DateCell
                     date={r.log_date}
                     isAdmin={isAdmin}
